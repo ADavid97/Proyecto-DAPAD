@@ -27,7 +27,7 @@ class Main:
 
         if df is not None:
             self.datos = df
-            print(df.to_string())
+            print(df.head())
 
 
 if __name__ == "__main__":
