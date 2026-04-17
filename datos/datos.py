@@ -1,4 +1,5 @@
 import pandas as pd
+import psycopg2
 
 
 class Datos:
@@ -20,6 +21,69 @@ class Datos:
             return None
         except Exception as e:
             print(f"Error al cargar '{ruta}': {e}")
+            return None
+
+    def cargar_tsv(self, ruta: str) -> pd.DataFrame:
+        try:
+            self.datos_crudos = pd.read_csv(ruta, sep="\t")
+            self.ruta_archivo = ruta
+            print(f"\nArchivo '{ruta}' cargado exitosamente.")
+            print(f"Filas: {self.datos_crudos.shape[0]} | Columnas: {self.datos_crudos.shape[1]}")
+            print(f"Columnas: {list(self.datos_crudos.columns)}\n")
+            return self.datos_crudos
+        except FileNotFoundError:
+            print(f"Error: No se encontro el archivo '{ruta}'.")
+            return None
+        except Exception as e:
+            print(f"Error al cargar '{ruta}': {e}")
+            return None
+
+    def listar_tablas(self, host: str, puerto: int, base_datos: str, usuario: str, contrasena: str) -> list | None:
+        try:
+            conexion = psycopg2.connect(
+                host=host,
+                port=puerto,
+                dbname=base_datos,
+                user=usuario,
+                password=contrasena
+            )
+            cursor = conexion.cursor()
+            cursor.execute("""
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+                ORDER BY table_name;
+            """)
+            tablas = [fila[0] for fila in cursor.fetchall()]
+            cursor.close()
+            conexion.close()
+            return tablas
+        except psycopg2.OperationalError as e:
+            print(f"Error de conexion a PostgreSQL: {e}")
+            return None
+        except Exception as e:
+            print(f"Error al obtener tablas: {e}")
+            return None
+
+    def cargar_tabla_sql(self, host: str, puerto: int, base_datos: str, usuario: str, contrasena: str, tabla: str) -> pd.DataFrame | None:
+        try:
+            conexion = psycopg2.connect(
+                host=host,
+                port=puerto,
+                dbname=base_datos,
+                user=usuario,
+                password=contrasena
+            )
+            self.datos_crudos = pd.read_sql_query(f"SELECT * FROM {tabla};", conexion)
+            conexion.close()
+            print(f"\nTabla '{tabla}' cargada exitosamente.")
+            print(f"Filas: {self.datos_crudos.shape[0]} | Columnas: {self.datos_crudos.shape[1]}")
+            print(f"Columnas: {list(self.datos_crudos.columns)}\n")
+            return self.datos_crudos
+        except psycopg2.OperationalError as e:
+            print(f"Error de conexion a PostgreSQL: {e}")
+            return None
+        except Exception as e:
+            print(f"Error al cargar la tabla: {e}")
             return None
 
     def cargar_excel(self, ruta: str) -> pd.DataFrame:
