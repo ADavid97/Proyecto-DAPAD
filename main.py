@@ -1,8 +1,11 @@
 import streamlit as st
 import pandas as pd
 from datos import Datos
+from analisis_exploratorio import AnalisisExploratorio
 
 st.set_page_config(page_title="DAAD", page_icon="", layout="wide")
+
+st.markdown("<style>*, *::before, *::after { border-radius: 0 !important; }</style>", unsafe_allow_html=True)
 
 # --- SESSION STATE ---
 if "df" not in st.session_state:
@@ -12,8 +15,14 @@ if "tablas_pg" not in st.session_state:
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.title(" DAAD Creado por Lupita Tiktok")
+    st.title("APLICAIÓN PARA ANÁLISIS DE DATOS")
     st.divider()
+
+    st.subheader("Desarrollado por:")
+    st.caption("Reyes Calva Angel David")
+    st.caption("Ortiz Juarez Emiliano")
+    st.caption("Hernandez Gaspar Andrei")
+
 
     st.subheader("Cargar datos")
     tipo = st.radio("Tipo de fuente", ["CSV", "TSV", "PostgreSQL"])
@@ -68,7 +77,7 @@ with st.sidebar:
 
 # --- AREA PRINCIPAL ---
 if st.session_state.df is None:
-    st.title("Bienvenido a DAAD ")
+    st.title("Bienvenido")
     st.info("Carga un archivo CSV, TSV o conecta a PostgreSQL desde el panel izquierdo para comenzar.")
 
 else:
@@ -85,7 +94,70 @@ else:
 
     elif seccion == "Analisis exploratorio":
         st.title("Analisis exploratorio")
-        st.info("Modulo en construccion.")
+        eda = AnalisisExploratorio(df)
+
+        opcion = st.selectbox("¿Qué deseas analizar?", [
+            "Resumen general",
+            "Estadísticas descriptivas",
+            "Conteo de nulos",
+            "Valores únicos por columna",
+            "Distribución de una columna",
+            "Matriz de correlación",
+            "Detección de outliers"
+        ])
+
+        st.divider()
+
+        if opcion == "Resumen general":
+            resumen = eda.resumen_general()
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Filas", resumen["filas"])
+            col2.metric("Columnas", resumen["columnas"])
+            col3.metric("Valores nulos", resumen["nulos_totales"])
+            col4.metric("Duplicados", resumen["duplicados"])
+            st.subheader("Tipos de datos por columna")
+            tipos_df = pd.DataFrame(resumen["tipos"].items(), columns=["Columna", "Tipo"])
+            st.dataframe(tipos_df, use_container_width=True)
+
+        elif opcion == "Estadísticas descriptivas":
+            st.dataframe(eda.estadisticas_descriptivas(), use_container_width=True)
+
+        elif opcion == "Conteo de nulos":
+            nulos = eda.conteo_nulos()
+            nulos_df = pd.DataFrame(nulos.items(), columns=["Columna", "Nulos"])
+            nulos_df = nulos_df.sort_values("Nulos", ascending=False)
+            st.dataframe(nulos_df, use_container_width=True)
+
+        elif opcion == "Valores únicos por columna":
+            columna = st.selectbox("Selecciona una columna", df.columns)
+            resultado = eda.valores_unicos(columna)
+            st.metric("Total de valores únicos", resultado["total"])
+            st.write("Valores:", resultado["valores"])
+
+        elif opcion == "Distribución de una columna":
+            columna = st.selectbox("Selecciona una columna", df.columns)
+            dist = eda.distribucion_columna(columna)
+            dist_df = pd.DataFrame(dist.items(), columns=[columna, "Frecuencia"])
+            dist_df = dist_df.sort_values("Frecuencia", ascending=False)
+            st.dataframe(dist_df, use_container_width=True)
+
+        elif opcion == "Matriz de correlación":
+            corr = eda.matriz_correlacion()
+            if corr.empty:
+                st.warning("No hay columnas numéricas para calcular correlación.")
+            else:
+                st.dataframe(corr.style.background_gradient(cmap="coolwarm"), use_container_width=True)
+
+        elif opcion == "Detección de outliers":
+            numericas = df.select_dtypes(include="number").columns.tolist()
+            if not numericas:
+                st.warning("No hay columnas numéricas en el dataset.")
+            else:
+                columna = st.selectbox("Selecciona una columna numérica", numericas)
+                outliers = eda.detectar_outliers(columna)
+                st.metric("Outliers detectados", len(outliers))
+                if not outliers.empty:
+                    st.dataframe(outliers, use_container_width=True)
 
     elif seccion == "Preprocesamiento":
         st.title("Preprocesamiento")
