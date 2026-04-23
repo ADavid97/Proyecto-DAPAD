@@ -34,7 +34,7 @@ with st.sidebar:
             try:
                 df = pd.read_csv(archivo, sep=sep)
                 st.session_state.df = df
-                st.success(f"✓ {df.shape[0]} filas × {df.shape[1]} columnas")
+                st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
             except Exception as e:
                 st.error(f"Error al leer el archivo: {e}")
 
@@ -50,7 +50,7 @@ with st.sidebar:
             tablas = cargador.listar_tablas(host, int(puerto), base_datos, usuario, contrasena)
             if tablas:
                 st.session_state.tablas_pg = tablas
-                st.success(f"✓ {len(tablas)} tablas encontradas")
+                st.success(f"{len(tablas)} tablas encontradas")
             else:
                 st.error("No se pudo conectar o no hay tablas.")
 
@@ -61,7 +61,7 @@ with st.sidebar:
                 df = cargador.cargar_tabla_sql(host, int(puerto), base_datos, usuario, contrasena, tabla)
                 if df is not None:
                     st.session_state.df = df
-                    st.success(f"✓ Tabla '{tabla}' cargada")
+                    st.success(f"Tabla '{tabla}' cargada")
 
     if st.session_state.df is not None:
         st.divider()
