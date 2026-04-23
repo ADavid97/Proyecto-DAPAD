@@ -56,7 +56,7 @@ with st.sidebar:
 
         if st.session_state.tablas_pg:
             tabla = st.selectbox("Selecciona tabla", st.session_state.tablas_pg)
-            if st.button("Cargar tabla", use_container_width=True):
+            if st.button("Cargar tabla", use_container_width=True) and tabla is not None:
                 cargador = Datos()
                 df = cargador.cargar_tabla_sql(host, int(puerto), base_datos, usuario, contrasena, tabla)
                 if df is not None:
@@ -69,7 +69,7 @@ with st.sidebar:
         seccion = st.radio(
             "Seccion",
             ["DataFrame", "Analisis exploratorio", "Preprocesamiento",
-             "Visualizacion", "Modelos", "Evaluacion"],
+            "Visualizacion", "Modelos", "Evaluacion"],
             label_visibility="collapsed"
         )
     else:
