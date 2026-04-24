@@ -6,10 +6,13 @@ class AnalisisExploratorio:
         self.datos = datos
 
     def estadisticas_descriptivas(self) -> pd.DataFrame:
-        return self.datos.describe(include="all")
+        df = self.datos.copy()
+        for col in df.select_dtypes(include="object").columns:
+            df[col] = df[col].astype(str)
+        return df.describe(include="all")
 
     def distribucion_columna(self, columna: str) -> dict:
-        return self.datos[columna].value_counts().to_dict()
+        return self.datos[columna].astype(str).value_counts().to_dict()
 
     def detectar_outliers(self, columna: str) -> pd.DataFrame:
         Q1 = self.datos[columna].quantile(0.25)
@@ -24,9 +27,10 @@ class AnalisisExploratorio:
         return self.datos.select_dtypes(include="number").corr()
 
     def valores_unicos(self, columna: str) -> dict:
+        serie = self.datos[columna].astype(str)
         return {
-            "total": self.datos[columna].nunique(),
-            "valores": self.datos[columna].unique().tolist()
+            "total": serie.nunique(),
+            "valores": serie.unique().tolist()
         }
 
     def conteo_nulos(self) -> dict:
@@ -38,5 +42,5 @@ class AnalisisExploratorio:
             "columnas": self.datos.shape[1],
             "tipos": self.datos.dtypes.astype(str).to_dict(),
             "nulos_totales": int(self.datos.isnull().sum().sum()),
-            "duplicados": int(self.datos.duplicated().sum())
+            "duplicados": int(self.datos.astype(str).duplicated().sum())
         }
