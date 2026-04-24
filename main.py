@@ -7,6 +7,14 @@ st.set_page_config(page_title="DAAD", page_icon="", layout="wide")
 
 st.markdown("<style>*, *::before, *::after { border-radius: 0 !important; }</style>", unsafe_allow_html=True)
 
+
+def mostrar_df(data: pd.DataFrame) -> None:
+    df_safe = data.copy()
+    for col in df_safe.select_dtypes(include="object").columns:
+        df_safe[col] = df_safe[col].astype(str)
+    st.dataframe(df_safe, width="stretch")
+
+
 # --- SESSION STATE ---
 if "df" not in st.session_state:
     st.session_state.df = None
@@ -23,20 +31,25 @@ with st.sidebar:
     st.caption("Ortiz Juarez Emiliano")
     st.caption("Hernandez Gaspar Andrei")
 
-
     st.subheader("Cargar datos")
     tipo = st.radio("Tipo de fuente", ["CSV", "TSV", "PostgreSQL"])
 
     if tipo in ("CSV", "TSV"):
-        archivo = st.file_uploader(f"Sube archivo {tipo}", type=["csv", "tsv", "txt"], key=tipo)
+        extensiones = ["csv"] if tipo == "CSV" else ["tsv", "txt"]
+        archivo = st.file_uploader(f"Sube archivo {tipo}", type=extensiones, key=tipo)
         if archivo is not None:
-            sep = "," if tipo == "CSV" else "\t"
-            try:
-                df = pd.read_csv(archivo, sep=sep)
-                st.session_state.df = df
-                st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
-            except Exception as e:
-                st.error(f"Error al leer el archivo: {e}")
+            extension = archivo.name.rsplit(".", 1)[-1].lower()
+            esperadas = {"CSV": ["csv"], "TSV": ["tsv", "txt"]}
+            if extension not in esperadas[tipo]:
+                st.error(f"El archivo '{archivo.name}' no es un {tipo} válido. Sube un archivo con extensión {extensiones}.")
+            else:
+                sep = "," if tipo == "CSV" else "\t"
+                try:
+                    df = pd.read_csv(archivo, sep=sep)
+                    st.session_state.df = df
+                    st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
+                except Exception as e:
+                    st.error(f"Error al leer el archivo: {e}")
 
     else:
         host = st.text_input("Host", "localhost")
@@ -69,7 +82,7 @@ with st.sidebar:
         seccion = st.radio(
             "Seccion",
             ["DataFrame", "Analisis exploratorio", "Preprocesamiento",
-            "Visualizacion", "Modelos", "Evaluacion"],
+             "Visualizacion", "Modelos", "Evaluacion"],
             label_visibility="collapsed"
         )
     else:
@@ -90,7 +103,7 @@ else:
         col2.metric("Columnas", df.shape[1])
         col3.metric("Valores nulos", int(df.isnull().sum().sum()))
         st.divider()
-        st.dataframe(df, use_container_width=True)
+        mostrar_df(df)
 
     elif seccion == "Analisis exploratorio":
         st.title("Analisis exploratorio")
@@ -117,16 +130,16 @@ else:
             col4.metric("Duplicados", resumen["duplicados"])
             st.subheader("Tipos de datos por columna")
             tipos_df = pd.DataFrame(resumen["tipos"].items(), columns=["Columna", "Tipo"])
-            st.dataframe(tipos_df, use_container_width=True)
+            mostrar_df(tipos_df)
 
         elif opcion == "Estadísticas descriptivas":
-            st.dataframe(eda.estadisticas_descriptivas(), use_container_width=True)
+            mostrar_df(eda.estadisticas_descriptivas())
 
         elif opcion == "Conteo de nulos":
             nulos = eda.conteo_nulos()
             nulos_df = pd.DataFrame(nulos.items(), columns=["Columna", "Nulos"])
             nulos_df = nulos_df.sort_values("Nulos", ascending=False)
-            st.dataframe(nulos_df, use_container_width=True)
+            mostrar_df(nulos_df)
 
         elif opcion == "Valores únicos por columna":
             columna = st.selectbox("Selecciona una columna", df.columns)
@@ -139,14 +152,14 @@ else:
             dist = eda.distribucion_columna(columna)
             dist_df = pd.DataFrame(dist.items(), columns=[columna, "Frecuencia"])
             dist_df = dist_df.sort_values("Frecuencia", ascending=False)
-            st.dataframe(dist_df, use_container_width=True)
+            mostrar_df(dist_df)
 
         elif opcion == "Matriz de correlación":
             corr = eda.matriz_correlacion()
             if corr.empty:
                 st.warning("No hay columnas numéricas para calcular correlación.")
             else:
-                st.dataframe(corr.style.background_gradient(cmap="coolwarm"), use_container_width=True)
+                st.dataframe(corr.style.background_gradient(cmap="coolwarm"), width="stretch")
 
         elif opcion == "Detección de outliers":
             numericas = df.select_dtypes(include="number").columns.tolist()
@@ -157,7 +170,7 @@ else:
                 outliers = eda.detectar_outliers(columna)
                 st.metric("Outliers detectados", len(outliers))
                 if not outliers.empty:
-                    st.dataframe(outliers, use_container_width=True)
+                    mostrar_df(outliers)
 
     elif seccion == "Preprocesamiento":
         st.title("Preprocesamiento")
