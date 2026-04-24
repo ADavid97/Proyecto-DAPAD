@@ -8,34 +8,20 @@ class Datos:
         self.datos_crudos = None
         self.separador = ","
 
-    def cargar_csv(self, ruta: str) -> pd.DataFrame:
+    def cargar_csv(self, fuente) -> pd.DataFrame:
         try:
-            self.datos_crudos = pd.read_csv(ruta, sep=self.separador)
-            self.ruta_archivo = ruta
-            print(f"\nArchivo '{ruta}' cargado exitosamente.")
-            print(f"Filas: {self.datos_crudos.shape[0]} | Columnas: {self.datos_crudos.shape[1]}")
-            print(f"Columnas: {list(self.datos_crudos.columns)}\n")
+            self.datos_crudos = pd.read_csv(fuente, sep=",")
+            self.ruta_archivo = getattr(fuente, "name", str(fuente))
             return self.datos_crudos
-        except FileNotFoundError:
-            print(f"Error: No se encontro el archivo '{ruta}'.")
-            return None
-        except Exception as e:
-            print(f"Error al cargar '{ruta}': {e}")
+        except Exception:
             return None
 
-    def cargar_tsv(self, ruta: str) -> pd.DataFrame:
+    def cargar_tsv(self, fuente) -> pd.DataFrame:
         try:
-            self.datos_crudos = pd.read_csv(ruta, sep="\t")
-            self.ruta_archivo = ruta
-            print(f"\nArchivo '{ruta}' cargado exitosamente.")
-            print(f"Filas: {self.datos_crudos.shape[0]} | Columnas: {self.datos_crudos.shape[1]}")
-            print(f"Columnas: {list(self.datos_crudos.columns)}\n")
+            self.datos_crudos = pd.read_csv(fuente, sep="\t")
+            self.ruta_archivo = getattr(fuente, "name", str(fuente))
             return self.datos_crudos
-        except FileNotFoundError:
-            print(f"Error: No se encontro el archivo '{ruta}'.")
-            return None
-        except Exception as e:
-            print(f"Error al cargar '{ruta}': {e}")
+        except Exception:
             return None
 
     def listar_tablas(self, host: str, puerto: int, base_datos: str, usuario: str, contrasena: str) -> list | None:

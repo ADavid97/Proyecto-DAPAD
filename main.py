@@ -43,13 +43,17 @@ with st.sidebar:
             if extension not in esperadas[tipo]:
                 st.error(f"El archivo '{archivo.name}' no es un {tipo} válido. Sube un archivo con extensión {extensiones}.")
             else:
-                sep = "," if tipo == "CSV" else "\t"
-                try:
-                    df = pd.read_csv(archivo, sep=sep)
+                cargador = Datos()
+                if tipo == "CSV":
+                    df = cargador.cargar_csv(archivo)
+                else:
+                    df = cargador.cargar_tsv(archivo)
+
+                if df is not None:
                     st.session_state.df = df
                     st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
-                except Exception as e:
-                    st.error(f"Error al leer el archivo: {e}")
+                else:
+                    st.error("Error al leer el archivo.")
 
     else:
         host = st.text_input("Host", "localhost")
