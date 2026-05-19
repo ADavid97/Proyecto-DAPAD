@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import psycopg2
 
@@ -72,11 +73,54 @@ class Datos:
             print(f"Error al cargar la tabla: {e}")
             return None
 
-    def cargar_excel(self, ruta: str) -> pd.DataFrame:
-        pass
+    def cargar_excel(self, fuente) -> dict | None:
+        try:
+            hojas = pd.read_excel(fuente, sheet_name=None)
+            self.ruta_archivo = getattr(fuente, "name", str(fuente))
+            return hojas if hojas else None
+        except Exception:
+            return None
 
-    def cargar_json(self, ruta: str) -> pd.DataFrame:
-        pass
+    def cargar_json(self, fuente) -> dict | None:
+        try:
+            data = json.load(fuente)
+            tablas = {}
+            self._extraer_tablas(data, "", tablas)
+            self.ruta_archivo = getattr(fuente, "name", str(fuente))
+            return tablas if tablas else None
+        except Exception:
+            return None
+
+    def _extraer_tablas(self, obj: object, prefijo: str, tablas: dict) -> None:
+        if isinstance(obj, list) and obj and isinstance(obj[0], dict):
+            sublist_keys = list(dict.fromkeys(
+                k for item in obj
+                for k, v in item.items()
+                if isinstance(v, list) and v and isinstance(v[0], dict)
+            ))
+            if sublist_keys:
+                record_key = sublist_keys[0]
+                meta_keys = list(dict.fromkeys(
+                    k for item in obj
+                    for k, v in item.items()
+                    if not isinstance(v, list)
+                ))
+                try:
+                    df = pd.json_normalize(obj, record_path=record_key, meta=meta_keys, errors='ignore')
+                    tablas[prefijo or "datos"] = df
+                    return
+                except Exception:
+                    pass
+                for item in obj:
+                    for clave, valor in item.items():
+                        nuevo = f"{prefijo}/{clave}" if prefijo else clave
+                        self._extraer_tablas(valor, nuevo, tablas)
+            else:
+                tablas[prefijo or "datos"] = pd.json_normalize(obj)
+        elif isinstance(obj, dict):
+            for clave, valor in obj.items():
+                nuevo = f"{prefijo}/{clave}" if prefijo else clave
+                self._extraer_tablas(valor, nuevo, tablas)
 
     def obtener_resumen(self) -> dict:
         pass

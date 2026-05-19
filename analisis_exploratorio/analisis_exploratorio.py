@@ -7,7 +7,7 @@ class AnalisisExploratorio:
 
     def estadisticas_descriptivas(self) -> pd.DataFrame:
         df = self.datos.copy()
-        for col in df.select_dtypes(include="object").columns:
+        for col in df.select_dtypes(include=["object", "str"]).columns:
             df[col] = df[col].astype(str)
         return df.describe(include="all")
 

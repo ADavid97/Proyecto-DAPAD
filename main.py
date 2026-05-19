@@ -10,7 +10,7 @@ st.markdown("<style>*, *::before, *::after { border-radius: 0 !important; }</sty
 
 def mostrar_df(data: pd.DataFrame) -> None:
     df_safe = data.copy()
-    for col in df_safe.select_dtypes(include="object").columns:
+    for col in df_safe.select_dtypes(include=["object", "str"]).columns:
         df_safe[col] = df_safe[col].astype(str)
     st.dataframe(df_safe, width="stretch")
 
@@ -20,6 +20,10 @@ if "df" not in st.session_state:
     st.session_state.df = None
 if "tablas_pg" not in st.session_state:
     st.session_state.tablas_pg = []
+if "tablas_json" not in st.session_state:
+    st.session_state.tablas_json = {}
+if "hojas_excel" not in st.session_state:
+    st.session_state.hojas_excel = {}
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -32,53 +36,88 @@ with st.sidebar:
     st.caption("Hernandez Gaspar Andrei")
 
     st.subheader("Cargar datos")
-    tipo = st.radio("Tipo de fuente", ["CSV", "TSV", "PostgreSQL"])
+    tab_est, tab_noest = st.tabs(["Estructurados", "No estructurados"])
 
-    if tipo in ("CSV", "TSV"):
-        extensiones = ["csv"] if tipo == "CSV" else ["tsv", "txt"]
-        archivo = st.file_uploader(f"Sube archivo {tipo}", type=extensiones, key=tipo)
-        if archivo is not None:
-            extension = archivo.name.rsplit(".", 1)[-1].lower()
-            esperadas = {"CSV": ["csv"], "TSV": ["tsv", "txt"]}
-            if extension not in esperadas[tipo]:
-                st.error(f"El archivo '{archivo.name}' no es un {tipo} válido. Sube un archivo con extensión {extensiones}.")
-            else:
-                cargador = Datos()
-                if tipo == "CSV":
-                    df = cargador.cargar_csv(archivo)
+    with tab_est:
+        tipo = st.radio("Formato", ["CSV", "TSV", "Excel", "PostgreSQL"], label_visibility="collapsed")
+
+        if tipo in ("CSV", "TSV"):
+            extensiones = ["csv"] if tipo == "CSV" else ["tsv", "txt"]
+            archivo = st.file_uploader(f"Sube archivo {tipo}", type=extensiones, key=tipo)
+            if archivo is not None:
+                extension = archivo.name.rsplit(".", 1)[-1].lower()
+                esperadas = {"CSV": ["csv"], "TSV": ["tsv", "txt"]}
+                if extension not in esperadas[tipo]:
+                    st.error(f"El archivo '{archivo.name}' no es un {tipo} válido. Sube un archivo con extensión {extensiones}.")
                 else:
-                    df = cargador.cargar_tsv(archivo)
+                    cargador = Datos()
+                    df = cargador.cargar_csv(archivo) if tipo == "CSV" else cargador.cargar_tsv(archivo)
+                    if df is not None:
+                        st.session_state.df = df
+                        st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
+                    else:
+                        st.error("Error al leer el archivo.")
 
-                if df is not None:
+        elif tipo == "Excel":
+            archivo = st.file_uploader("Sube archivo Excel", type=["xlsx", "xls"], key="Excel")
+            if archivo is not None:
+                cargador = Datos()
+                hojas = cargador.cargar_excel(archivo)
+                if hojas:
+                    st.session_state.hojas_excel = hojas
+                    st.success(f"{len(hojas)} hoja(s) encontrada(s)")
+                else:
+                    st.error("No se pudo leer el archivo Excel.")
+
+            if st.session_state.hojas_excel:
+                nombre = st.selectbox("Selecciona hoja", list(st.session_state.hojas_excel.keys()), key="sel_excel")
+                if st.button("Cargar hoja", key="btn_excel", use_container_width=True):
+                    df = st.session_state.hojas_excel[nombre]
                     st.session_state.df = df
                     st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
-                else:
-                    st.error("Error al leer el archivo.")
 
-    else:
-        host = st.text_input("Host", "localhost")
-        puerto = st.number_input("Puerto", value=5432, step=1)
-        base_datos = st.text_input("Base de datos")
-        usuario = st.text_input("Usuario")
-        contrasena = st.text_input("Contrasena", type="password")
+        elif tipo == "PostgreSQL":
+            host = st.text_input("Host", "localhost")
+            puerto = st.number_input("Puerto", value=5432, step=1)
+            base_datos = st.text_input("Base de datos")
+            usuario = st.text_input("Usuario")
+            contrasena = st.text_input("Contrasena", type="password")
 
-        if st.button("Conectar", use_container_width=True):
-            cargador = Datos()
-            tablas = cargador.listar_tablas(host, int(puerto), base_datos, usuario, contrasena)
-            if tablas:
-                st.session_state.tablas_pg = tablas
-                st.success(f"{len(tablas)} tablas encontradas")
-            else:
-                st.error("No se pudo conectar o no hay tablas.")
-
-        if st.session_state.tablas_pg:
-            tabla = st.selectbox("Selecciona tabla", st.session_state.tablas_pg)
-            if st.button("Cargar tabla", use_container_width=True) and tabla is not None:
+            if st.button("Conectar", use_container_width=True):
                 cargador = Datos()
-                df = cargador.cargar_tabla_sql(host, int(puerto), base_datos, usuario, contrasena, tabla)
-                if df is not None:
-                    st.session_state.df = df
-                    st.success(f"Tabla '{tabla}' cargada")
+                tablas = cargador.listar_tablas(host, int(puerto), base_datos, usuario, contrasena)
+                if tablas:
+                    st.session_state.tablas_pg = tablas
+                    st.success(f"{len(tablas)} tablas encontradas")
+                else:
+                    st.error("No se pudo conectar o no hay tablas.")
+
+            if st.session_state.tablas_pg:
+                tabla = st.selectbox("Selecciona tabla", st.session_state.tablas_pg)
+                if st.button("Cargar tabla", use_container_width=True) and tabla is not None:
+                    cargador = Datos()
+                    df = cargador.cargar_tabla_sql(host, int(puerto), base_datos, usuario, contrasena, tabla)
+                    if df is not None:
+                        st.session_state.df = df
+                        st.success(f"Tabla '{tabla}' cargada")
+
+    with tab_noest:
+        archivo = st.file_uploader("Sube archivo JSON", type=["json"], key="JSON")
+        if archivo is not None:
+            cargador = Datos()
+            tablas = cargador.cargar_json(archivo)
+            if tablas:
+                st.session_state.tablas_json = tablas
+                st.success(f"{len(tablas)} tabla(s) encontrada(s)")
+            else:
+                st.error("No se pudo leer el archivo JSON.")
+
+        if st.session_state.tablas_json:
+            nombre = st.selectbox("Selecciona tabla", list(st.session_state.tablas_json.keys()), key="sel_json")
+            if st.button("Cargar tabla", key="btn_json", use_container_width=True):
+                df = st.session_state.tablas_json[nombre]
+                st.session_state.df = df
+                st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
 
     if st.session_state.df is not None:
         st.divider()
