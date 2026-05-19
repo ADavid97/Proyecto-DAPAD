@@ -6,3 +6,6 @@ seaborn
 psycopg2-binary
 streamlit
 openpyxl
+cloudscraper
+beautifulsoup4
+lxml

@@ -22,6 +22,8 @@ if "tablas_pg" not in st.session_state:
     st.session_state.tablas_pg = []
 if "tablas_json" not in st.session_state:
     st.session_state.tablas_json = {}
+if "elementos_url" not in st.session_state:
+    st.session_state.elementos_url = {}
 if "hojas_excel" not in st.session_state:
     st.session_state.hojas_excel = {}
 
@@ -118,6 +120,43 @@ with st.sidebar:
                 df = st.session_state.tablas_json[nombre]
                 st.session_state.df = df
                 st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
+
+        st.divider()
+        st.markdown("**Web scraping**")
+        url = st.text_input("URL", placeholder="https://es.wikipedia.org/wiki/...", key="url_input")
+        if st.button("Buscar elementos", key="btn_buscar_url", use_container_width=True):
+            if url:
+                with st.spinner("Descargando página..."):
+                    cargador = Datos()
+                    elementos = cargador.cargar_url(url)
+                if elementos:
+                    st.session_state.elementos_url = elementos
+                    total = sum(len(v) for v in elementos.values())
+                    st.success(f"{total} elemento(s) en {len(elementos)} etiqueta(s)")
+                else:
+                    st.session_state.elementos_url = {}
+                    st.error("No se encontraron tablas ni listas en la página.")
+            else:
+                st.warning("Ingresa una URL.")
+
+        if st.session_state.elementos_url:
+            etiquetas_disponibles = list(st.session_state.elementos_url.keys())
+            etiquetas_sel = st.multiselect(
+                "Etiquetas", etiquetas_disponibles, default=etiquetas_disponibles, key="sel_tags"
+            )
+            opciones = {
+                nombre: df
+                for tag in etiquetas_sel
+                for nombre, df in st.session_state.elementos_url.get(tag, {}).items()
+            }
+            if opciones:
+                nombre_el = st.selectbox("Elemento", list(opciones.keys()), key="sel_url")
+                if st.button("Cargar elemento", key="btn_cargar_url", use_container_width=True):
+                    df = opciones[nombre_el]
+                    st.session_state.df = df
+                    st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
+            else:
+                st.info("Selecciona al menos una etiqueta.")
 
     if st.session_state.df is not None:
         st.divider()
