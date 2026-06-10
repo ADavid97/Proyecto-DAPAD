@@ -4,9 +4,16 @@ from abc import ABC, abstractmethod
 
 
 class Modelo(ABC):
-    def __init__(self, datos: np.ndarray):
+    """Base de todos los modelos: define el contrato entrenar / predecir / evaluar.
+
+    `scaler` lo asignan las subclases cuando se entrena con `escalar=True`;
+    `predecir` debe aplicarlo si existe.
+    """
+
+    def __init__(self, datos: pd.DataFrame):
         self.datos = datos
         self.modelo = None
+        self.scaler = None
         self.resultados = {}
 
     @abstractmethod
@@ -19,7 +26,4 @@ class Modelo(ABC):
 
     @abstractmethod
     def evaluar(self) -> dict:
-        pass
-
-    def obtener_metricas(self) -> dict:
         pass
