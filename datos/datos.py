@@ -2,33 +2,47 @@ import json
 import re
 import pandas as pd
 import psycopg2
+from psycopg2 import sql
 import cloudscraper
 from bs4 import BeautifulSoup
 
 
 class Datos:
+    """Capa de carga de datos: CSV/TSV, Excel, PostgreSQL, JSON anidado y web scraping.
+
+    Cuando un método de carga falla devuelve None y deja la causa en `ultimo_error`.
+    """
+
     def __init__(self, ruta_archivo: str = ""):
         self.ruta_archivo = ruta_archivo
         self.datos_crudos = None
         self.separador = ","
+        self.ultimo_error: str | None = None
 
-    def cargar_csv(self, fuente) -> pd.DataFrame:
+    def cargar_csv(self, fuente) -> pd.DataFrame | None:
+        """Lee un CSV desde una ruta o un file-like (st.file_uploader)."""
         try:
             self.datos_crudos = pd.read_csv(fuente, sep=",")
             self.ruta_archivo = getattr(fuente, "name", str(fuente))
+            self.ultimo_error = None
             return self.datos_crudos
-        except Exception:
+        except Exception as e:
+            self.ultimo_error = str(e)
             return None
 
-    def cargar_tsv(self, fuente) -> pd.DataFrame:
+    def cargar_tsv(self, fuente) -> pd.DataFrame | None:
+        """Lee un TSV (separado por tabuladores) desde una ruta o un file-like."""
         try:
             self.datos_crudos = pd.read_csv(fuente, sep="\t")
             self.ruta_archivo = getattr(fuente, "name", str(fuente))
+            self.ultimo_error = None
             return self.datos_crudos
-        except Exception:
+        except Exception as e:
+            self.ultimo_error = str(e)
             return None
 
     def listar_tablas(self, host: str, puerto: int, base_datos: str, usuario: str, contrasena: str) -> list | None:
+        """Devuelve los nombres de las tablas del esquema public, o None si falla la conexión."""
         try:
             conexion = psycopg2.connect(
                 host=host,
@@ -46,15 +60,14 @@ class Datos:
             tablas = [fila[0] for fila in cursor.fetchall()]
             cursor.close()
             conexion.close()
+            self.ultimo_error = None
             return tablas
-        except psycopg2.OperationalError as e:
-            print(f"Error de conexion a PostgreSQL: {e}")
-            return None
         except Exception as e:
-            print(f"Error al obtener tablas: {e}")
+            self.ultimo_error = str(e)
             return None
 
     def cargar_tabla_sql(self, host: str, puerto: int, base_datos: str, usuario: str, contrasena: str, tabla: str) -> pd.DataFrame | None:
+        """Carga una tabla completa de PostgreSQL como DataFrame."""
         try:
             conexion = psycopg2.connect(
                 host=host,
@@ -63,38 +76,42 @@ class Datos:
                 user=usuario,
                 password=contrasena
             )
-            self.datos_crudos = pd.read_sql_query(f"SELECT * FROM {tabla};", conexion)
+            # Identifier escapa el nombre de la tabla para evitar inyección SQL
+            query = sql.SQL("SELECT * FROM {}").format(sql.Identifier(tabla))
+            self.datos_crudos = pd.read_sql_query(query.as_string(conexion), conexion)
             conexion.close()
-            print(f"\nTabla '{tabla}' cargada exitosamente.")
-            print(f"Filas: {self.datos_crudos.shape[0]} | Columnas: {self.datos_crudos.shape[1]}")
-            print(f"Columnas: {list(self.datos_crudos.columns)}\n")
+            self.ultimo_error = None
             return self.datos_crudos
-        except psycopg2.OperationalError as e:
-            print(f"Error de conexion a PostgreSQL: {e}")
-            return None
         except Exception as e:
-            print(f"Error al cargar la tabla: {e}")
+            self.ultimo_error = str(e)
             return None
 
     def cargar_excel(self, fuente) -> dict | None:
+        """Lee todas las hojas de un Excel; devuelve {nombre_hoja: DataFrame}."""
         try:
             hojas = pd.read_excel(fuente, sheet_name=None)
             self.ruta_archivo = getattr(fuente, "name", str(fuente))
+            self.ultimo_error = None
             return hojas if hojas else None
-        except Exception:
+        except Exception as e:
+            self.ultimo_error = str(e)
             return None
 
     def cargar_json(self, fuente) -> dict | None:
+        """Extrae tablas de un JSON (incluso anidado); devuelve {ruta: DataFrame}."""
         try:
             data = json.load(fuente)
             tablas = {}
             self._extraer_tablas(data, "", tablas)
             self.ruta_archivo = getattr(fuente, "name", str(fuente))
+            self.ultimo_error = None
             return tablas if tablas else None
-        except Exception:
+        except Exception as e:
+            self.ultimo_error = str(e)
             return None
 
     def _extraer_tablas(self, obj: object, prefijo: str, tablas: dict) -> None:
+        """Recorre el JSON recursivamente acumulando en `tablas` cada lista de registros encontrada."""
         if isinstance(obj, list) and obj and isinstance(obj[0], dict):
             sublist_keys = list(dict.fromkeys(
                 k for item in obj
@@ -127,11 +144,13 @@ class Datos:
 
     @staticmethod
     def _limpiar(texto: str) -> str:
+        """Quita referencias tipo [1] de Wikipedia y colapsa espacios."""
         texto = re.sub(r"\[\d+\]", "", texto)
         return re.sub(r"\s+", " ", texto).strip()
 
     @staticmethod
     def _seccion(elemento) -> str:
+        """Devuelve el encabezado h2/h3/h4 más cercano que precede al elemento."""
         nodo = elemento.find_previous(["h2", "h3", "h4"])
         if nodo:
             span = nodo.find("span", class_="mw-headline")
@@ -139,6 +158,11 @@ class Datos:
         return "Sin sección"
 
     def cargar_url(self, url: str, clase_tabla: str | None = None) -> dict | None:
+        """Scrapea tablas, listas (ul/ol) y listas de definición (dl) de una página.
+
+        Devuelve {tag: {sección: DataFrame}} agrupando cada elemento por el
+        encabezado que lo precede, o None si no se encontró nada.
+        """
         try:
             scraper = cloudscraper.create_scraper()
             resp = scraper.get(url, timeout=15)
@@ -199,25 +223,8 @@ class Datos:
                 resultado["dl"] = dls
 
             self.ruta_archivo = url
+            self.ultimo_error = None
             return resultado if resultado else None
         except Exception as e:
-            print(f"Error al obtener URL: {e}")
+            self.ultimo_error = str(e)
             return None
-
-    def obtener_resumen(self) -> dict:
-        pass
-
-    def obtener_tipos(self) -> dict:
-        pass
-
-    def obtener_nulos(self) -> dict:
-        pass
-
-    def obtener_dimensiones(self) -> tuple:
-        pass
-
-    def obtener_columnas(self) -> list:
-        pass
-
-    def mostrar_primeros(self, n: int = 5) -> pd.DataFrame:
-        pass
