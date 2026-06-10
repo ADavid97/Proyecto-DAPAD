@@ -6,7 +6,7 @@ Aplicación web en Streamlit para cargar, explorar, limpiar, visualizar y modela
 
 | Sección | Qué hace |
 |---|---|
-| Carga de datos | CSV, TSV, Excel (multi-hoja), PostgreSQL, JSON anidado y web scraping (tablas, listas y definiciones) |
+| Carga de datos | CSV, TSV, Excel (multi-hoja), PostgreSQL, JSON anidado y web scraping (tablas con estructura real vía pd.read_html, conversión numérica automática con convención es/en, listas y definiciones) |
 | ① DataFrame | Vista del dataset activo, métricas básicas y descarga en CSV |
 | ② Análisis exploratorio | Resumen general, estadísticas descriptivas, nulos, valores únicos, distribuciones, correlación y outliers (IQR) |
 | ③ Preprocesamiento | Selección de columnas, nulos (eliminar/rellenar), duplicados, filtros, conversión de tipos, escalado y codificación (One-Hot o LabelEncoder), con historial de transformaciones y deshacer paso a paso |

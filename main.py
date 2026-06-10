@@ -261,9 +261,12 @@ with st.sidebar:
                     st.session_state.elementos_url = elementos
                     total = sum(len(v) for v in elementos.values())
                     st.success(f"{total} elemento(s) en {len(elementos)} etiqueta(s)")
+                elif cargador.ultimo_error:
+                    st.session_state.elementos_url = {}
+                    st.error(f"No se pudo descargar la página. Detalle: {cargador.ultimo_error}")
                 else:
                     st.session_state.elementos_url = {}
-                    st.error("No se encontraron tablas ni listas en la página.")
+                    st.error("La página se descargó pero no contiene tablas ni listas.")
             else:
                 st.warning("Ingresa una URL.")
 
