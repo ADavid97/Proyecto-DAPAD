@@ -9,10 +9,10 @@ Aplicación web en Streamlit para cargar, explorar, limpiar, visualizar y modela
 | Carga de datos | CSV, TSV, Excel (multi-hoja), PostgreSQL, JSON anidado y web scraping (tablas, listas y definiciones) |
 | ① DataFrame | Vista del dataset activo, métricas básicas y descarga en CSV |
 | ② Análisis exploratorio | Resumen general, estadísticas descriptivas, nulos, valores únicos, distribuciones, correlación y outliers (IQR) |
-| ③ Preprocesamiento | Selección de columnas, nulos (eliminar/rellenar), duplicados, filtros, conversión de tipos, escalado y codificación de categóricas |
+| ③ Preprocesamiento | Selección de columnas, nulos (eliminar/rellenar), duplicados, filtros, conversión de tipos, escalado y codificación (One-Hot o LabelEncoder), con historial de transformaciones y deshacer paso a paso |
 | ④ Visualización | Histograma, boxplot, dispersión, barras, líneas, pastel y mapa de calor (Plotly) |
-| ⑤ Modelos | KNN, Árbol de Decisión, Regresión Logística, Regresión Lineal y K-Means, con escalado sin fuga de datos y split estratificado |
-| ⑥ Evaluación | Métricas de clasificación/regresión/clustering, matriz de confusión, reporte e importancia de features |
+| ⑤ Modelos | KNN, Árbol de Decisión, Regresión Logística, Regresión Lineal y K-Means, con escalado sin fuga de datos, split estratificado y validación cruzada k-fold opcional |
+| ⑥ Evaluación | Métricas de clasificación/regresión/clustering, matriz de confusión, reporte, importancia de features, predicción interactiva y descarga del modelo (.joblib) |
 
 Soporta varios datasets cargados a la vez (selector de dataset activo en el panel lateral).
 

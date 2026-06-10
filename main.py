@@ -44,11 +44,26 @@ def _resumen_general(data: pd.DataFrame) -> dict:
     return AnalisisExploratorio(data).resumen_general()
 
 
+MAX_HISTORIAL = 10  # pasos máximos que se pueden deshacer por dataset
+
+
 def _guardar_df(nuevo_df: pd.DataFrame) -> None:
     """Actualiza df activo y sincroniza con el dict de datasets."""
     st.session_state.df = nuevo_df
     if st.session_state.df_activo:
         st.session_state.datasets[st.session_state.df_activo] = nuevo_df
+
+
+def _clave_historial() -> str:
+    return st.session_state.df_activo or "_actual"
+
+
+def _aplicar_transformacion(descripcion: str, nuevo_df: pd.DataFrame) -> None:
+    """Aplica una transformación guardando el estado previo para poder deshacerla."""
+    hist = st.session_state.historiales.setdefault(_clave_historial(), [])
+    hist.append({"descripcion": descripcion, "df_antes": st.session_state.df})
+    del hist[:-MAX_HISTORIAL]
+    _guardar_df(nuevo_df)
 
 
 def mostrar_df(data: pd.DataFrame) -> None:
@@ -104,6 +119,8 @@ if "metricas" not in st.session_state:
     st.session_state.metricas = None
 if "cv_resultados" not in st.session_state:
     st.session_state.cv_resultados = None
+if "historiales" not in st.session_state:
+    st.session_state.historiales = {}
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -149,6 +166,7 @@ with st.sidebar:
                         st.session_state.datasets[nombre_ds] = df
                         st.session_state.df_activo = nombre_ds
                         st.session_state.df_original = None
+                        st.session_state.historiales.pop(nombre_ds, None)
                         st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
                     else:
                         detalle = f" Detalle: {cargador.ultimo_error}" if cargador.ultimo_error else ""
@@ -175,6 +193,7 @@ with st.sidebar:
                     st.session_state.datasets[nombre_ds] = df
                     st.session_state.df_activo = nombre_ds
                     st.session_state.df_original = None
+                    st.session_state.historiales.pop(nombre_ds, None)
                     st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
 
         elif tipo == "PostgreSQL":
@@ -204,6 +223,7 @@ with st.sidebar:
                         st.session_state.datasets[tabla] = df
                         st.session_state.df_activo = tabla
                         st.session_state.df_original = None
+                        st.session_state.historiales.pop(tabla, None)
                         st.success(f"Tabla '{tabla}' cargada")
 
     with tab_noest:
@@ -226,6 +246,7 @@ with st.sidebar:
                 st.session_state.datasets[nombre] = df
                 st.session_state.df_activo = nombre
                 st.session_state.df_original = None
+                st.session_state.historiales.pop(nombre, None)
                 st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
 
         st.divider()
@@ -264,6 +285,7 @@ with st.sidebar:
                     st.session_state.datasets[nombre_el] = df
                     st.session_state.df_activo = nombre_el
                     st.session_state.df_original = None
+                    st.session_state.historiales.pop(nombre_el, None)
                     st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
             else:
                 st.info("Selecciona al menos una etiqueta.")
@@ -287,6 +309,7 @@ with st.sidebar:
         st.caption(f"{_df_sel.shape[0]} filas × {_df_sel.shape[1]} columnas")
         if st.button("Eliminar dataset", key="btn_del_ds"):
             del st.session_state.datasets[sel_ds]
+            st.session_state.historiales.pop(sel_ds, None)
             if st.session_state.datasets:
                 nuevo_ds = list(st.session_state.datasets.keys())[0]
                 st.session_state.df = st.session_state.datasets[nuevo_ds]
@@ -458,7 +481,10 @@ else:
             )
             if st.button("Aplicar", key="btn_sel_cols", use_container_width=True):
                 if cols_sel:
-                    _guardar_df(pre.seleccionar_columnas(cols_sel))
+                    _aplicar_transformacion(
+                        f"Seleccionar columnas ({len(cols_sel)} conservadas)",
+                        pre.seleccionar_columnas(cols_sel),
+                    )
                     st.success(f"Columnas reducidas a {len(cols_sel)}")
                     st.rerun()
                 else:
@@ -469,7 +495,7 @@ else:
             st.info(f"{nulos} valores nulos encontrados — se eliminarán todas las filas que contengan al menos uno.")
             if st.button("Aplicar", key="btn_elim_nulos", use_container_width=True):
                 resultado = pre.eliminar_nulos()
-                _guardar_df(resultado)
+                _aplicar_transformacion("Eliminar filas con nulos", resultado)
                 st.success(f"Filas: {df.shape[0]} → {resultado.shape[0]}")
                 st.rerun()
 
@@ -486,7 +512,7 @@ else:
                 valor_cte = st.number_input("Valor constante", value=0.0)
             if st.button("Aplicar", key="btn_rel_nulos", use_container_width=True):
                 resultado = pre.rellenar_nulos(estrategia, valor_cte)
-                _guardar_df(resultado)
+                _aplicar_transformacion(f"Rellenar nulos ({estrategia})", resultado)
                 st.success(f"Nulos rellenados. Restantes: {int(resultado.isnull().sum().sum())}")
                 st.rerun()
 
@@ -495,7 +521,7 @@ else:
             st.info(f"{dups} filas duplicadas encontradas.")
             if st.button("Aplicar", key="btn_elim_dups", use_container_width=True):
                 resultado = pre.eliminar_duplicados()
-                _guardar_df(resultado)
+                _aplicar_transformacion("Eliminar duplicados", resultado)
                 st.success(f"Filas: {df.shape[0]} → {resultado.shape[0]}")
                 st.rerun()
 
@@ -507,7 +533,7 @@ else:
             if st.button("Aplicar", key="btn_cast", use_container_width=True):
                 try:
                     resultado = pre.convertir_tipo(col_cast, dtype_sel)
-                    _guardar_df(resultado)
+                    _aplicar_transformacion(f"Convertir '{col_cast}' a {dtype_sel}", resultado)
                     st.success(f"'{col_cast}' convertida a {dtype_sel}.")
                     st.rerun()
                 except ValueError as e:
@@ -526,7 +552,7 @@ else:
                     vs = valor_str or ""
                     valor = float(vs) if pd.api.types.is_numeric_dtype(df[col_filtro]) else vs
                     resultado = pre.filtrar_filas(col_filtro, valor, operador)
-                    _guardar_df(resultado)
+                    _aplicar_transformacion(f"Filtrar: {col_filtro} {operador} {vs}", resultado)
                     st.success(f"Filas: {df.shape[0]} → {resultado.shape[0]}")
                     st.rerun()
                 except Exception as e:
@@ -543,7 +569,7 @@ else:
                     "usa mejor la opción de escalado en ⑤ Modelos para evitar fuga de datos."
                 )
                 if st.button("Aplicar", key="btn_std", use_container_width=True):
-                    _guardar_df(pre.normalizar_standard())
+                    _aplicar_transformacion("Normalizar Standard", pre.normalizar_standard())
                     st.success("Normalización Standard aplicada.")
                     st.rerun()
 
@@ -558,7 +584,7 @@ else:
                     "usa mejor la opción de escalado en ⑤ Modelos para evitar fuga de datos."
                 )
                 if st.button("Aplicar", key="btn_mm", use_container_width=True):
-                    _guardar_df(pre.normalizar_minmax())
+                    _aplicar_transformacion("Normalizar MinMax", pre.normalizar_minmax())
                     st.success("Normalización MinMax aplicada.")
                     st.rerun()
 
@@ -583,10 +609,13 @@ else:
                 if st.button("Aplicar", key="btn_enc", use_container_width=True, disabled=not cols_cod):
                     if es_onehot:
                         resultado = pre.codificar_onehot(cols_cod)
-                        _guardar_df(resultado)
+                        _aplicar_transformacion(f"One-Hot ({len(cols_cod)} columnas)", resultado)
                         st.success(f"One-Hot aplicado. Columnas: {df.shape[1]} → {resultado.shape[1]}")
                     else:
-                        _guardar_df(pre.codificar_categoricas(cols_cod))
+                        _aplicar_transformacion(
+                            f"LabelEncoder ({len(cols_cod)} columnas)",
+                            pre.codificar_categoricas(cols_cod),
+                        )
                         st.success("Columnas codificadas con LabelEncoder.")
                     st.rerun()
 
@@ -594,11 +623,37 @@ else:
         st.markdown('<span class="daad-subheader">Vista previa</span>', unsafe_allow_html=True)
         mostrar_df(df)
 
-        if st.session_state.df_original is not None:
-            if st.button("Restaurar datos originales", key="btn_restaurar"):
-                _guardar_df(st.session_state.df_original.copy())
-                st.success("Datos restaurados al estado original.")
-                st.rerun()
+        st.divider()
+        historial = st.session_state.historiales.get(_clave_historial(), [])
+        st.markdown('<span class="daad-subheader">Historial de transformaciones</span>', unsafe_allow_html=True)
+        if historial:
+            for i, paso in enumerate(historial, 1):
+                filas, cols = paso["df_antes"].shape
+                st.caption(f"{i}. {paso['descripcion']}  ·  antes: {filas} × {cols}")
+            if len(historial) == MAX_HISTORIAL:
+                st.caption(f"(se conservan solo los últimos {MAX_HISTORIAL} pasos)")
+        else:
+            st.caption("Sin transformaciones en esta sesión.")
+
+        c_undo, c_rest = st.columns(2)
+        if c_undo.button(
+            "Deshacer último paso",
+            key="btn_undo",
+            use_container_width=True,
+            disabled=not historial,
+        ):
+            paso = historial.pop()
+            _guardar_df(paso["df_antes"])
+            st.rerun()
+        if c_rest.button(
+            "Restaurar datos originales",
+            key="btn_restaurar",
+            use_container_width=True,
+            disabled=st.session_state.df_original is None,
+        ):
+            _guardar_df(st.session_state.df_original.copy())
+            st.session_state.historiales[_clave_historial()] = []
+            st.rerun()
 
     elif seccion == "④ Visualización":
         _page_header("VIZ", "Visualización", "datos / gráficas")
@@ -738,7 +793,7 @@ else:
                     and len(modelo_e.etiquetas) == df.shape[0]
                 ):
                     st.plotly_chart(
-                        viz.grafica_clusters(df[modelo_e.features].copy(), modelo_e.etiquetas, modelo_e.centroides),
+                        viz.grafica_clusters(df[list(modelo_e.features)].copy(), modelo_e.etiquetas, modelo_e.centroides),
                         use_container_width=True,
                     )
 
@@ -875,7 +930,7 @@ else:
                 st.markdown('<span class="daad-subheader">Visualización de clusters</span>', unsafe_allow_html=True)
                 if modelo.etiquetas is not None and modelo.centroides is not None:
                     st.plotly_chart(
-                        viz.grafica_clusters(df[modelo.features].copy(), modelo.etiquetas, modelo.centroides),
+                        viz.grafica_clusters(df[list(modelo.features)].copy(), modelo.etiquetas, modelo.centroides),
                         use_container_width=True,
                     )
                 if modelo.inercias:
