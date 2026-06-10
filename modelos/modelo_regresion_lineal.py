@@ -11,6 +11,8 @@ from .modelo import Modelo
 class ModeloRegresionLineal(Modelo):
     """Regresión lineal (target numérico); evalúa con R², MSE y RMSE."""
 
+    scoring_cv = "r2"
+
     def __init__(self, datos):
         super().__init__(datos)
         self.target: str | None = None
@@ -19,6 +21,9 @@ class ModeloRegresionLineal(Modelo):
         self.X_test: np.ndarray | None = None
         self.y_test: np.ndarray | None = None
         self.y_pred: np.ndarray | None = None
+
+    def _crear_estimador(self) -> LinearRegression:
+        return LinearRegression()
 
     def entrenar(self, test_size: float = 0.2, random_state: int = 42, escalar: bool = False) -> None:
         df = self.datos if isinstance(self.datos, pd.DataFrame) else pd.DataFrame(self.datos)
@@ -32,7 +37,7 @@ class ModeloRegresionLineal(Modelo):
             self.scaler = StandardScaler()
             self.X_train = self.scaler.fit_transform(self.X_train)
             self.X_test = self.scaler.transform(self.X_test)
-        self.modelo = LinearRegression()
+        self.modelo = self._crear_estimador()
         self.modelo.fit(self.X_train, self.y_train)
         self.coeficientes = self.modelo.coef_
         self.y_pred = self.modelo.predict(self.X_test)

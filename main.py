@@ -1,3 +1,6 @@
+import io
+
+import joblib
 import streamlit as st
 import pandas as pd
 from datos import Datos
@@ -99,6 +102,8 @@ if "modelo_tipo" not in st.session_state:
     st.session_state.modelo_tipo = None
 if "metricas" not in st.session_state:
     st.session_state.metricas = None
+if "cv_resultados" not in st.session_state:
+    st.session_state.cv_resultados = None
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -562,10 +567,27 @@ else:
             if not cats:
                 st.warning("No hay columnas categóricas.")
             else:
-                st.info(f"Columnas a codificar: {', '.join(cats)}")
-                if st.button("Aplicar", key="btn_enc", use_container_width=True):
-                    _guardar_df(pre.codificar_categoricas())
-                    st.success("Columnas categóricas codificadas con LabelEncoder.")
+                metodo = st.radio(
+                    "Método",
+                    ["One-Hot (columnas binarias)", "LabelEncoder (ordinal)"],
+                    horizontal=True,
+                    help="One-Hot no impone orden entre categorías (recomendado para nominales); "
+                         "LabelEncoder asigna enteros 0..n y solo es adecuado si hay un orden real.",
+                )
+                cols_cod = st.multiselect("Columnas a codificar", cats, default=cats)
+                es_onehot = metodo.startswith("One-Hot")
+                if es_onehot:
+                    altas = [c for c in cols_cod if df[c].nunique() > 30]
+                    if altas:
+                        st.warning(f"Columnas con más de 30 categorías: {altas} — One-Hot generará muchas columnas.")
+                if st.button("Aplicar", key="btn_enc", use_container_width=True, disabled=not cols_cod):
+                    if es_onehot:
+                        resultado = pre.codificar_onehot(cols_cod)
+                        _guardar_df(resultado)
+                        st.success(f"One-Hot aplicado. Columnas: {df.shape[1]} → {resultado.shape[1]}")
+                    else:
+                        _guardar_df(pre.codificar_categoricas(cols_cod))
+                        st.success("Columnas codificadas con LabelEncoder.")
                     st.rerun()
 
         st.divider()
@@ -730,6 +752,13 @@ else:
                 value=True,
                 help="Evita fuga de datos: el scaler se ajusta con el conjunto de entrenamiento y solo transforma el de prueba.",
             )
+            c_cv1, c_cv2 = st.columns([2, 1])
+            hacer_cv = c_cv1.checkbox(
+                "Validación cruzada (k-fold)",
+                help="Entrena k veces sobre particiones distintas y reporta la métrica media ± desviación. "
+                     "Si el escalado está activo, el scaler se ajusta dentro de cada fold.",
+            )
+            n_folds = int(c_cv2.number_input("Folds", min_value=3, max_value=10, value=5, step=1, disabled=not hacer_cv))
 
             hiperparams: dict = {}
             if tipo_modelo == "KNN — K-Nearest Neighbors":
@@ -778,6 +807,9 @@ else:
                 try:
                     with st.spinner("Entrenando..."):
                         modelo.entrenar(test_size=test_size, escalar=escalar)
+                        st.session_state.cv_resultados = (
+                            modelo.validacion_cruzada(cv=n_folds, escalar=escalar) if hacer_cv else None
+                        )
                     st.session_state.modelo_entrenado = modelo
                     st.session_state.modelo_tipo = "regresion" if es_regresion else "clasificacion"
                     st.session_state.metricas = modelo.evaluar()
@@ -812,6 +844,16 @@ else:
                     c3.metric("RMSE", f"{metricas['rmse']:.4f}")
                     if modelo_e.y_test is not None and modelo_e.y_pred is not None:
                         st.plotly_chart(viz.grafica_regresion(modelo_e.y_test, modelo_e.y_pred), use_container_width=True)
+
+                cv_res = st.session_state.cv_resultados
+                if cv_res:
+                    st.divider()
+                    st.markdown('<span class="daad-subheader">Validación cruzada</span>', unsafe_allow_html=True)
+                    st.metric(
+                        f"{cv_res['metrica']} medio ({len(cv_res['scores'])} folds)",
+                        f"{cv_res['media']:.3f} ± {cv_res['desviacion']:.3f}",
+                    )
+                    st.caption("Scores por fold: " + " · ".join(f"{s:.3f}" for s in cv_res["scores"]))
 
     elif seccion == "⑥ Evaluación":
         _page_header("EVL", "Evaluación", "datos / métricas")
@@ -879,3 +921,46 @@ else:
                         Visualizacion(imp_df).grafica_barras("Feature", "Importancia"),
                         use_container_width=True,
                     )
+
+            # ── Predicción interactiva y exportación (todos los modelos) ──
+            if modelo.features:
+                st.divider()
+                st.markdown('<span class="daad-subheader">Predicción interactiva</span>', unsafe_allow_html=True)
+                n_cols = min(3, len(modelo.features))
+                cols_form = st.columns(n_cols)
+                valores = {}
+                for i, feat in enumerate(modelo.features):
+                    if feat in df.columns and pd.api.types.is_numeric_dtype(df[feat]):
+                        defecto = float(df[feat].mean())
+                    else:
+                        defecto = 0.0
+                    valores[feat] = cols_form[i % n_cols].number_input(feat, value=defecto, key=f"pred_{feat}")
+                if st.button("Predecir", use_container_width=True, key="btn_predecir"):
+                    try:
+                        pred = modelo.predecir(pd.DataFrame([valores]))[0]
+                        if tipo == "clustering":
+                            st.metric("Cluster asignado", str(pred))
+                        elif tipo == "regresion":
+                            st.metric(f"Predicción de '{modelo.target}'", f"{float(pred):.4f}")
+                        else:
+                            st.metric(f"Clase predicha de '{modelo.target}'", str(pred))
+                    except Exception as e:
+                        st.error(f"No se pudo predecir: {e}")
+
+            st.divider()
+            buffer_modelo = io.BytesIO()
+            joblib.dump(
+                {
+                    "modelo": modelo.modelo,
+                    "scaler": modelo.scaler,
+                    "features": modelo.features,
+                    "target": getattr(modelo, "target", None),
+                },
+                buffer_modelo,
+            )
+            st.download_button(
+                "Descargar modelo entrenado (.joblib)",
+                buffer_modelo.getvalue(),
+                file_name="modelo_daad.joblib",
+                use_container_width=True,
+            )

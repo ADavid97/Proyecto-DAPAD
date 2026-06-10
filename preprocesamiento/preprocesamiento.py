@@ -98,14 +98,21 @@ class Preprocesamiento:
         self.datos_procesados = df
         return self.datos_procesados
 
-    def codificar_categoricas(self) -> pd.DataFrame:
-        """Convierte cada columna object/category a enteros con LabelEncoder."""
+    def codificar_categoricas(self, columnas: list | None = None) -> pd.DataFrame:
+        """Convierte columnas object/category a enteros con LabelEncoder (impone un orden artificial)."""
         df = self._base().copy()
-        categoricas = df.select_dtypes(include=["object", "category"]).columns
+        categoricas = columnas if columnas else df.select_dtypes(include=["object", "category"]).columns
         for col in categoricas:
             le = LabelEncoder()
             df[col] = le.fit_transform(df[col].astype(str))
         self.datos_procesados = df
+        return self.datos_procesados
+
+    def codificar_onehot(self, columnas: list | None = None) -> pd.DataFrame:
+        """One-Hot: una columna binaria 0/1 por categoría, sin imponer orden entre categorías."""
+        df = self._base().copy()
+        categoricas = columnas if columnas else df.select_dtypes(include=["object", "category"]).columns.tolist()
+        self.datos_procesados = pd.get_dummies(df, columns=categoricas, dtype=int)
         return self.datos_procesados
 
     def convertir_tipo(self, columna: str, dtype: str) -> pd.DataFrame:

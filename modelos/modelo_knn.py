@@ -19,6 +19,9 @@ class ModeloKNN(Modelo):
         self.y_test: np.ndarray | None = None
         self.y_pred: np.ndarray | None = None
 
+    def _crear_estimador(self) -> KNeighborsClassifier:
+        return KNeighborsClassifier(n_neighbors=self.k)
+
     def entrenar(self, test_size: float = 0.2, random_state: int = 42, escalar: bool = False) -> None:
         df = self.datos if isinstance(self.datos, pd.DataFrame) else pd.DataFrame(self.datos)
         X = df[self.features].values
@@ -37,7 +40,7 @@ class ModeloKNN(Modelo):
             self.scaler = StandardScaler()
             self.X_train = self.scaler.fit_transform(self.X_train)
             self.X_test = self.scaler.transform(self.X_test)
-        self.modelo = KNeighborsClassifier(n_neighbors=self.k)
+        self.modelo = self._crear_estimador()
         self.modelo.fit(self.X_train, self.y_train)
         self.y_pred = self.modelo.predict(self.X_test)
 
