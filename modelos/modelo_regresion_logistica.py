@@ -24,8 +24,9 @@ class ModeloRegresionLogistica(Modelo):
 
     def entrenar(self, test_size: float = 0.2, random_state: int = 42, escalar: bool = False) -> None:
         df = self.datos if isinstance(self.datos, pd.DataFrame) else pd.DataFrame(self.datos)
-        X = df[self.features].values
-        y = df[self.target].values
+        # to_numpy(): con pandas 3 .values devuelve ArrowStringArray para texto y sklearn no lo acepta
+        X = df[self.features].to_numpy()
+        y = df[self.target].to_numpy()
         try:
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
                 X, y, test_size=test_size, random_state=random_state, stratify=y
@@ -45,7 +46,7 @@ class ModeloRegresionLogistica(Modelo):
         self.y_pred = self.modelo.predict(self.X_test)
 
     def predecir(self, datos: pd.DataFrame) -> np.ndarray:
-        X = datos[self.features].values if isinstance(datos, pd.DataFrame) else datos
+        X = datos[self.features].to_numpy() if isinstance(datos, pd.DataFrame) else datos
         if self.scaler is not None:
             X = self.scaler.transform(X)
         return self.modelo.predict(X)

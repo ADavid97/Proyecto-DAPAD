@@ -18,7 +18,7 @@ class ModeloKMeans(Modelo):
 
     def _X(self) -> np.ndarray:
         df = self.datos if isinstance(self.datos, pd.DataFrame) else pd.DataFrame(self.datos)
-        return df[self.features].values if self.features else df.select_dtypes(include="number").values
+        return df[self.features].to_numpy() if self.features else df.select_dtypes(include="number").to_numpy()
 
     def entrenar(self) -> None:
         X = self._X()
@@ -28,7 +28,7 @@ class ModeloKMeans(Modelo):
         self.centroides = self.modelo.cluster_centers_
 
     def predecir(self, datos: pd.DataFrame) -> np.ndarray:
-        X = datos[self.features].values if isinstance(datos, pd.DataFrame) else datos
+        X = datos[self.features].to_numpy() if isinstance(datos, pd.DataFrame) else datos
         return self.modelo.predict(X)
 
     def evaluar(self) -> dict:

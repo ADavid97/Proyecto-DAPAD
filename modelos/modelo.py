@@ -45,8 +45,9 @@ class Modelo(ABC):
         ajusta dentro de cada fold (sin fuga de datos entre folds).
         """
         df = self.datos if isinstance(self.datos, pd.DataFrame) else pd.DataFrame(self.datos)
-        X = df[self.features].values
-        y = df[self.target].values
+        # to_numpy(): con pandas 3 .values devuelve ArrowStringArray para texto y sklearn no lo acepta
+        X = df[self.features].to_numpy()
+        y = df[self.target].to_numpy()
         estimador = self._crear_estimador()
         if escalar:
             estimador = make_pipeline(StandardScaler(), estimador)
