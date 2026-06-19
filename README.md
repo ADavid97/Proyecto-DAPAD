@@ -12,18 +12,40 @@ Aplicación web en Streamlit para cargar, explorar, limpiar, visualizar y modela
 | ③ Análisis exploratorio | Resumen general, estadísticas descriptivas, nulos, valores únicos, distribuciones, matriz de correlación y detección de outliers (IQR) |
 | ④ Preprocesamiento | Selección de columnas, nulos (eliminar/rellenar por media, mediana, moda o constante), columnas vacías, duplicados, filtros, conversión de tipos, escalado (Standard/MinMax) y codificación One-Hot o LabelEncoder (preservan NaN), con historial de transformaciones y deshacer paso a paso |
 | ⑤ Visualización | Histograma, boxplot, dispersión, barras, líneas, pastel y mapa de calor (Plotly) |
-| ⑥ Modelos | KNN, Árbol de Decisión, Random Forest, Gradient Boosting, Regresión Logística, Regresión Lineal y K-Means; con escalado sin fuga de datos, split estratificado, hiperparámetros por modelo, validación cruzada k-fold opcional y búsqueda automática de hiperparámetros (GridSearchCV) |
-| ⑦ Evaluación | Métricas de clasificación/regresión/clustering; diagnóstico de confianza (train vs test + línea base); matriz de confusión y reporte; coeficientes e importancia de features (nativa o por permutación); residuos en regresión; predicción interactiva con probabilidades; predicción por lotes desde CSV; y export del modelo como Pipeline (.joblib) |
+| ⑥ Modelos | 13 modelos (7 clasificación, 5 regresión, 1 clustering); escalado sin fuga de datos, split estratificado, hiperparámetros por modelo, validación cruzada k-fold y búsqueda automática (GridSearchCV) |
+| ⚖ Comparar modelos | Leaderboard automático: evalúa todos los modelos de una tarea (clasificación o regresión) en el mismo dataset y los rankea por métrica de CV con desviación estándar y tiempo de entrenamiento |
+| ⑦ Evaluación | Métricas de clasificación/regresión/clustering; diagnóstico de confianza (train vs test + línea base); matriz de confusión y reporte; coeficientes e importancia de features (nativa o por permutación); residuos en regresión; curvas ROC y Precisión-Recall (binario y multiclase); predicción interactiva con probabilidades; predicción por lotes desde CSV; export del modelo como Pipeline (.joblib) |
 | ⑧ Asistente IA | Chat local (vía Ollama) que conoce el dataset activo y guía el uso de la app |
 
 ## Modelos disponibles (⑥)
 
-- **Clasificación**: KNN, Árbol de Decisión, Random Forest, Gradient Boosting, Regresión Logística.
-- **Regresión**: Regresión Lineal (con regularización opcional Ridge/Lasso).
-- **Clustering** (no supervisado): K-Means, con curva del codo y silhouette.
+**Clasificación (7)**
+| Modelo | Notas |
+|---|---|
+| KNN — K-Nearest Neighbors | weights, metric configurables |
+| Árbol de Decisión | profundidad máx., min_samples_leaf, criterion |
+| Random Forest | n_estimadores, profundidad máx. |
+| Gradient Boosting | n_estimadores, learning_rate, profundidad máx. |
+| Regresión Logística | C (regularización), class_weight |
+| Naive Bayes | — |
+| Red Neuronal (MLP) | — |
 
-Cada modelo supervisado ofrece sus hiperparámetros relevantes y una casilla opcional de
-búsqueda automática de los mejores valores por validación cruzada.
+**Regresión (6)**
+| Modelo | Notas |
+|---|---|
+| Regresión Lineal | variantes Ridge y Lasso con alpha |
+| KNN (regresión) | igual que KNN, pero predice valores continuos |
+| Árbol de Decisión (regresión) | profundidad máx., min_samples_leaf |
+| Random Forest (regresión) | n_estimadores, profundidad máx. |
+| Gradient Boosting (regresión) | n_estimadores, learning_rate, profundidad máx. |
+| Red Neuronal (regresión, MLP) | — |
+
+**Clustering no supervisado (1)**
+| Modelo | Notas |
+|---|---|
+| K-Means | curva del codo, silhouette score (muestreado en datasets grandes) |
+
+Todos los modelos supervisados exponen sus hiperparámetros relevantes y una casilla opcional de búsqueda automática de los mejores valores (GridSearchCV).
 
 ## Requisitos
 
@@ -63,15 +85,15 @@ ollama run llama3.2
 
 ```
 DAAD/
-├── main.py                     # UI de Streamlit (sidebar + 8 secciones)
+├── main.py                     # UI de Streamlit (sidebar + 9 secciones)
 ├── styles.py                   # CSS del design system
 ├── chart_theme.py              # Template "daad" de Plotly
 ├── datos/                      # Carga: CSV/TSV, Excel, PostgreSQL, JSON, scraping
 ├── analisis_exploratorio/      # EDA: resúmenes, outliers, correlación
 ├── preprocesamiento/           # Limpieza, escalado, codificación
-├── modelos/                    # Modelo (ABC) + ModeloSupervisado + 7 modelos
+├── modelos/                    # Modelo (ABC) + ModeloSupervisado + 14 modelos
 ├── evaluacion/                 # Métricas de modelos entrenados
-├── visualizacion/              # Gráficas Plotly
+├── visualizacion/              # Gráficas Plotly (incluye ROC, PR, residuos)
 ├── asistente/                  # Asistente IA local (Ollama)
 └── .streamlit/config.toml      # Tema de Streamlit
 ```
@@ -82,13 +104,21 @@ DAAD/
   el `StandardScaler` solo con train; en la validación cruzada el scaler entra al pipeline (se
   ajusta dentro de cada fold) y la búsqueda de hiperparámetros se hace solo sobre train. Los
   clasificadores estratifican el split.
-- **Modelos supervisados**: comparten la lógica común en `ModeloSupervisado`; cada modelo solo
-  declara su estimador y si es clasificación o regresión, de modo que añadir uno nuevo es trivial.
+- **Arquitectura de modelos**: `ModeloSupervisado` (base) centraliza toda la lógica de entrenamiento,
+  evaluación, validación cruzada, GridSearch, diagnósticos de confianza e interpretabilidad. Cada
+  subclase solo declara su estimador sklearn y la rejilla de hiperparámetros, lo que hace trivial
+  añadir nuevos modelos.
+- **Registro único de modelos**: `REGISTRO_MODELOS` en `main.py` es la única fuente de verdad;
+  el selector, la construcción del objeto y el comparador de modelos derivan de él sin duplicar
+  listas.
 - **Confianza e interpretabilidad**: cada evaluación reporta train vs test (sobreajuste), una
-  línea base (Dummy), importancia de features (nativa o por permutación) y, en modelos lineales,
-  los coeficientes.
-- **Rendimiento**: las operaciones costosas de EDA (describe, correlación, duplicados, CSV de
-  descarga) usan `@st.cache_data`.
+  línea base (DummyClassifier/DummyRegressor), importancia de features (nativa o por permutación)
+  y, en modelos lineales, los coeficientes. Los clasificadores con `predict_proba` muestran además
+  curvas ROC y Precisión-Recall.
+- **Comparador de modelos**: ejecuta validación cruzada de todos los modelos de la misma tarea en
+  paralelo (`n_jobs=-1`) y presenta un ranking con media, desviación estándar y tiempo.
+- **Rendimiento**: las operaciones costosas de EDA usan `@st.cache_data`; el silhouette de K-Means
+  se muestrea a 5 000 filas para evitar el costo O(n²) en datasets grandes.
 - **Persistencia**: el trabajo (datasets, transformaciones, modelo y métricas) se guarda de forma
   asíncrona y atómica en `resultados/_sesion.pkl` (local, no versionado) y se restaura al abrir.
 

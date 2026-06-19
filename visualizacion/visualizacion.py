@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score
 
 from chart_theme import PALETTE
 
@@ -247,4 +248,53 @@ class Visualizacion:
             xaxis_title="Predicho",
             yaxis_title="Real",
         )
+        return fig
+
+    def grafica_roc(self, y_real: np.ndarray, proba: np.ndarray, clases) -> go.Figure:
+        """Curva ROC (TPR vs FPR). Binario: una curva; multiclase: una por clase (uno-vs-resto).
+
+        Más arriba/izquierda = mejor; la diagonal es el azar. La leyenda muestra el AUC.
+        """
+        y_real = np.asarray(y_real)
+        clases = list(clases)
+        fig = go.Figure()
+        if len(clases) == 2:
+            fpr, tpr, _ = roc_curve(y_real, proba[:, 1], pos_label=clases[1])
+            fig.add_scatter(x=fpr, y=tpr, mode="lines", name=f"AUC = {auc(fpr, tpr):.3f}",
+                            line=dict(color=PALETTE[0], width=2))
+        else:
+            for i, c in enumerate(clases):
+                fpr, tpr, _ = roc_curve((y_real == c).astype(int), proba[:, i])
+                fig.add_scatter(x=fpr, y=tpr, mode="lines",
+                                name=f"{c} (AUC = {auc(fpr, tpr):.3f})",
+                                line=dict(color=PALETTE[i % len(PALETTE)], width=2))
+        fig.add_scatter(x=[0, 1], y=[0, 1], mode="lines", name="Azar",
+                        line=dict(color="#9a9a9a", dash="dash", width=1.5))
+        fig.update_layout(template="daad", xaxis_title="Tasa de falsos positivos",
+                          yaxis_title="Tasa de verdaderos positivos")
+        return fig
+
+    def grafica_precision_recall(self, y_real: np.ndarray, proba: np.ndarray, clases) -> go.Figure:
+        """Curva Precisión-Recall. Binario: una curva; multiclase: una por clase (uno-vs-resto).
+
+        Útil sobre todo con clases desbalanceadas; la leyenda muestra la precisión media (AP).
+        """
+        y_real = np.asarray(y_real)
+        clases = list(clases)
+        fig = go.Figure()
+        if len(clases) == 2:
+            y_bin = (y_real == clases[1]).astype(int)
+            prec, rec, _ = precision_recall_curve(y_bin, proba[:, 1])
+            ap = average_precision_score(y_bin, proba[:, 1])
+            fig.add_scatter(x=rec, y=prec, mode="lines", name=f"AP = {ap:.3f}",
+                            line=dict(color=PALETTE[0], width=2))
+        else:
+            for i, c in enumerate(clases):
+                y_bin = (y_real == c).astype(int)
+                prec, rec, _ = precision_recall_curve(y_bin, proba[:, i])
+                ap = average_precision_score(y_bin, proba[:, i])
+                fig.add_scatter(x=rec, y=prec, mode="lines",
+                                name=f"{c} (AP = {ap:.3f})",
+                                line=dict(color=PALETTE[i % len(PALETTE)], width=2))
+        fig.update_layout(template="daad", xaxis_title="Recall", yaxis_title="Precisión")
         return fig

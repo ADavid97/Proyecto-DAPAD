@@ -5,11 +5,9 @@ from .modelo_regresion_logistica import ModeloRegresionLogistica
 from .modelo_arbol_decision import ModeloArbolDecision
 from .modelo_knn import ModeloKNN
 from .modelo_random_forest import ModeloRandomForest
-from .modelo_gradient_boosting import ModeloGradientBoosting
 from .modelo_knn_regresion import ModeloKNNRegresion
 from .modelo_arbol_regresion import ModeloArbolRegresion
 from .modelo_random_forest_regresion import ModeloRandomForestRegresion
-from .modelo_gradient_boosting_regresion import ModeloGradientBoostingRegresion
 from .modelo_naive_bayes import ModeloNaiveBayes
 from .modelo_red_neuronal import ModeloRedNeuronal
 from .modelo_red_neuronal_regresion import ModeloRedNeuronalRegresion

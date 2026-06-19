@@ -2,6 +2,7 @@ import io
 import os
 import pickle
 import threading
+import time
 
 import joblib
 import streamlit as st
@@ -13,9 +14,8 @@ from visualizacion import Visualizacion
 from preprocesamiento import Preprocesamiento
 from modelos import (
     ModeloKNN, ModeloKMeans, ModeloRegresionLineal, ModeloRegresionLogistica,
-    ModeloArbolDecision, ModeloRandomForest, ModeloGradientBoosting,
+    ModeloArbolDecision, ModeloRandomForest,
     ModeloKNNRegresion, ModeloArbolRegresion, ModeloRandomForestRegresion,
-    ModeloGradientBoostingRegresion,
     ModeloNaiveBayes, ModeloRedNeuronal, ModeloRedNeuronalRegresion,
 )
 from asistente import (
@@ -166,21 +166,26 @@ MAX_HISTORIAL = 10  # pasos máximos que se pueden deshacer por dataset
 # Tarea de cada modelo del selector de ⑥ Modelos. Es la ÚNICA fuente de verdad
 # del tipo de problema: gobierna la validación del target y la vista de resultados
 # en ⑦ Evaluación. Añadir un modelo nuevo = registrar aquí su tarea.
-TAREA_MODELO = {
-    "KNN — K-Nearest Neighbors": "clasificacion",
-    "Árbol de Decisión": "clasificacion",
-    "Random Forest": "clasificacion",
-    "Gradient Boosting": "clasificacion",
-    "Regresión Logística": "clasificacion",
-    "Naive Bayes": "clasificacion",
-    "Red Neuronal": "clasificacion",
-    "Regresión Lineal": "regresion",
-    "KNN (regresión)": "regresion",
-    "Árbol de Decisión (regresión)": "regresion",
-    "Random Forest (regresión)": "regresion",
-    "Gradient Boosting (regresión)": "regresion",
-    "Red Neuronal (regresión)": "regresion",
-    "K-Means (clustering)": "clustering",
+# Fuente única de verdad de los modelos: nombre visible → (clase, tarea).
+# Su orden define el del selector, y de aquí se derivan la tarea y la construcción
+# (sin cadenas if/elif paralelas que mantener en sincronía). El bloque de widgets
+# de hiperparámetros sigue en la UI porque es específico de cada modelo.
+REGISTRO_MODELOS: dict[str, tuple[type, str]] = {
+    # Clasificación (predicen una categoría)
+    "KNN — K-Nearest Neighbors": (ModeloKNN, "clasificacion"),
+    "Árbol de Decisión": (ModeloArbolDecision, "clasificacion"),
+    "Random Forest": (ModeloRandomForest, "clasificacion"),
+    "Regresión Logística": (ModeloRegresionLogistica, "clasificacion"),
+    "Naive Bayes": (ModeloNaiveBayes, "clasificacion"),
+    "Red Neuronal": (ModeloRedNeuronal, "clasificacion"),
+    # Regresión (predicen un número)
+    "Regresión Lineal": (ModeloRegresionLineal, "regresion"),
+    "KNN (regresión)": (ModeloKNNRegresion, "regresion"),
+    "Árbol de Decisión (regresión)": (ModeloArbolRegresion, "regresion"),
+    "Random Forest (regresión)": (ModeloRandomForestRegresion, "regresion"),
+    "Red Neuronal (regresión)": (ModeloRedNeuronalRegresion, "regresion"),
+    # Clustering (agrupa sin target; construcción aparte por usar n_clusters)
+    "K-Means (clustering)": (ModeloKMeans, "clustering"),
 }
 
 
@@ -755,6 +760,7 @@ with st.sidebar:
                 "④ Preprocesamiento",
                 "⑤ Visualización",
                 "⑥ Modelos",
+                "⚖ Comparar modelos",
                 "⑦ Evaluación",
                 "⑧ Asistente IA",
             ],
@@ -1421,25 +1427,7 @@ else:
             st.error("No hay columnas numéricas. Convierte o codifica tus columnas en ④ Preprocesamiento primero.")
             st.stop()
 
-        tipo_modelo = st.selectbox("Tipo de modelo", [
-            # Clasificación (predicen una categoría)
-            "KNN — K-Nearest Neighbors",
-            "Árbol de Decisión",
-            "Random Forest",
-            "Gradient Boosting",
-            "Regresión Logística",
-            "Naive Bayes",
-            "Red Neuronal",
-            # Regresión (predicen un número)
-            "Regresión Lineal",
-            "KNN (regresión)",
-            "Árbol de Decisión (regresión)",
-            "Random Forest (regresión)",
-            "Gradient Boosting (regresión)",
-            "Red Neuronal (regresión)",
-            # Clustering (agrupan sin target)
-            "K-Means (clustering)",
-        ])
+        tipo_modelo = st.selectbox("Tipo de modelo", list(REGISTRO_MODELOS))
         st.divider()
 
         if tipo_modelo == "K-Means (clustering)":
@@ -1549,11 +1537,6 @@ else:
                 hiperparams["n_estimators"] = int(cr1.number_input("Número de árboles", min_value=10, max_value=1000, value=100, step=10))
                 profrf = int(cr2.number_input("Profundidad máxima (0 = sin límite)", min_value=0, max_value=50, value=0, step=1))
                 hiperparams["profundidad_max"] = None if profrf == 0 else profrf
-            elif tipo_modelo in ("Gradient Boosting", "Gradient Boosting (regresión)"):
-                cg1, cg2, cg3 = st.columns(3)
-                hiperparams["n_estimators"] = int(cg1.number_input("Número de árboles", min_value=10, max_value=1000, value=100, step=10))
-                hiperparams["learning_rate"] = float(cg2.number_input("Tasa de aprendizaje", min_value=0.01, max_value=1.0, value=0.1, step=0.01))
-                hiperparams["profundidad_max"] = int(cg3.number_input("Profundidad máxima", min_value=1, max_value=20, value=3, step=1))
             elif tipo_modelo == "Regresión Logística":
                 hiperparams["max_iter"] = int(st.number_input("Max iteraciones", min_value=100, max_value=2000, value=200, step=100))
                 cl1, cl2 = st.columns(2)
@@ -1585,7 +1568,7 @@ else:
             if invalidas:
                 st.warning(f"Features no numéricas: {invalidas}. Codifícalas primero.")
 
-            es_regresion = TAREA_MODELO.get(tipo_modelo) == "regresion"
+            es_regresion = REGISTRO_MODELOS[tipo_modelo][1] == "regresion"
             error_target = None
             if target:
                 serie_target = df[target]
@@ -1605,33 +1588,8 @@ else:
             puede_entrenar = bool(features) and target not in features and not invalidas and error_target is None
 
             if st.button("Entrenar modelo", use_container_width=True, disabled=not puede_entrenar):
-                if tipo_modelo == "KNN — K-Nearest Neighbors":
-                    modelo = ModeloKNN(df, **hiperparams)
-                elif tipo_modelo == "KNN (regresión)":
-                    modelo = ModeloKNNRegresion(df, **hiperparams)
-                elif tipo_modelo == "Árbol de Decisión":
-                    modelo = ModeloArbolDecision(df, **hiperparams)
-                elif tipo_modelo == "Árbol de Decisión (regresión)":
-                    modelo = ModeloArbolRegresion(df, **hiperparams)
-                elif tipo_modelo == "Random Forest":
-                    modelo = ModeloRandomForest(df, **hiperparams)
-                elif tipo_modelo == "Random Forest (regresión)":
-                    modelo = ModeloRandomForestRegresion(df, **hiperparams)
-                elif tipo_modelo == "Gradient Boosting":
-                    modelo = ModeloGradientBoosting(df, **hiperparams)
-                elif tipo_modelo == "Gradient Boosting (regresión)":
-                    modelo = ModeloGradientBoostingRegresion(df, **hiperparams)
-                elif tipo_modelo == "Regresión Logística":
-                    modelo = ModeloRegresionLogistica(df, **hiperparams)
-                elif tipo_modelo == "Naive Bayes":
-                    modelo = ModeloNaiveBayes(df, **hiperparams)
-                elif tipo_modelo == "Red Neuronal":
-                    modelo = ModeloRedNeuronal(df, **hiperparams)
-                elif tipo_modelo == "Red Neuronal (regresión)":
-                    modelo = ModeloRedNeuronalRegresion(df, **hiperparams)
-                else:
-                    modelo = ModeloRegresionLineal(df, **hiperparams)
-
+                clase_modelo = REGISTRO_MODELOS[tipo_modelo][0]
+                modelo = clase_modelo(df, **hiperparams)
                 modelo.features = features
                 modelo.target = target
                 try:
@@ -1660,7 +1618,7 @@ else:
                         st.warning(
                             "La red neuronal no terminó de converger en el máximo de iteraciones. "
                             "Sube el «Máximo de iteraciones», asegúrate de tener «Escalar features» "
-                            "activado, o prueba Random Forest / Gradient Boosting con estos datos."
+                            "activado, o prueba Random Forest con estos datos."
                         )
                     if modelo.mejores_hiperparametros:
                         st.info("Mejores parámetros encontrados: " + ", ".join(
@@ -1801,6 +1759,24 @@ else:
                 st.divider()
                 _subheader("Reporte de clasificación")
                 st.code(m["reporte"])
+
+                # Curvas ROC y Precisión-Recall si el estimador da probabilidades.
+                # Se usan las del X_test ya escalado (mismo espacio que entrenó el modelo).
+                estimador = modelo.modelo
+                if hasattr(estimador, "predict_proba") and modelo.X_test is not None:
+                    try:
+                        proba = estimador.predict_proba(modelo.X_test)
+                        clases_proba = estimador.classes_
+                        st.divider()
+                        c_roc, c_pr = st.columns(2)
+                        with c_roc:
+                            _subheader("Curva ROC")
+                            st.plotly_chart(viz.grafica_roc(modelo.y_test, proba, clases_proba), use_container_width=True)
+                        with c_pr:
+                            _subheader("Curva Precisión-Recall")
+                            st.plotly_chart(viz.grafica_precision_recall(modelo.y_test, proba, clases_proba), use_container_width=True)
+                    except Exception:
+                        pass
 
             # ── Confianza, coeficientes e importancias (modelos supervisados) ──
             if tipo in ("clasificacion", "regresion"):
@@ -2007,6 +1983,94 @@ else:
                 ]
                 with st.chat_message("assistant"):
                     st.write_stream(chat_stream(mensajes, modelos_ia[0] if modelos_ia else MODELO_POR_DEFECTO))
+
+    elif seccion == "⚖ Comparar modelos":
+        _page_header("CMP", "Comparar modelos", "datos / leaderboard")
+        numericas = df.select_dtypes(include="number").columns.tolist()
+
+        nulos = int(df.isnull().sum().sum())
+        if nulos > 0:
+            st.error(f"{nulos} valores nulos detectados. Trátalos en ④ Preprocesamiento primero.")
+            st.stop()
+        if not numericas:
+            st.error("No hay columnas numéricas. Codifica o convierte tus columnas en ④ Preprocesamiento primero.")
+            st.stop()
+
+        st.caption(
+            "Entrena todos los modelos de la tarea elegida sobre las mismas features y target, "
+            "con validación cruzada, y los ordena por su métrica media (hiperparámetros por defecto)."
+        )
+        features = st.multiselect("Features (columnas X)", numericas, key="cmp_features")
+        tarea = st.radio("Tarea", ["Clasificación", "Regresión"], horizontal=True, key="cmp_tarea")
+        target_opts = [c for c in df.columns if c not in features]
+        target = st.selectbox("Target (columna y)", target_opts if target_opts else df.columns.tolist(), key="cmp_target")
+        c1, c2 = st.columns(2)
+        escalar = c1.checkbox("Escalar features", value=True, key="cmp_escalar",
+            help="Recomendado: KNN, regresión logística/lineal y redes neuronales lo necesitan; a los árboles no les afecta.")
+        n_folds = int(c2.number_input("Folds (CV)", min_value=3, max_value=10, value=5, step=1, key="cmp_folds"))
+
+        tarea_key = "regresion" if tarea == "Regresión" else "clasificacion"
+        invalidas = [f for f in features if f not in numericas]
+        error_target = None
+        if target:
+            serie = df[target]
+            if tarea_key == "regresion" and not pd.api.types.is_numeric_dtype(serie):
+                error_target = f"'{target}' no es numérica; la regresión necesita un target numérico."
+            elif tarea_key == "clasificacion" and pd.api.types.is_float_dtype(serie) and serie.nunique() > 20:
+                error_target = f"'{target}' parece continua ({serie.nunique()} valores únicos); usa Regresión o discretízala."
+        if invalidas:
+            st.warning(f"Features no numéricas: {invalidas}. Codifícalas primero.")
+        if error_target:
+            st.error(error_target)
+
+        puede = bool(features) and target not in features and not invalidas and error_target is None
+        if st.button("Comparar modelos", use_container_width=True, disabled=not puede):
+            modelos_tarea = [(n, cls) for n, (cls, t) in REGISTRO_MODELOS.items() if t == tarea_key]
+            filas = []
+            barra = st.progress(0.0, text="Preparando...")
+            for i, (nombre, cls) in enumerate(modelos_tarea, 1):
+                barra.progress((i - 1) / len(modelos_tarea),
+                               text=f"({i}/{len(modelos_tarea)}) Evaluando: {nombre}…")
+                try:
+                    m = cls(df)
+                    m.features = features
+                    m.target = target
+                    t0 = time.perf_counter()
+                    cv = m.validacion_cruzada(cv=n_folds, escalar=escalar)
+                    filas.append({
+                        "Modelo": nombre,
+                        cv["metrica"]: cv["media"],
+                        "Desv.": cv["desviacion"],
+                        "Tiempo (s)": time.perf_counter() - t0,
+                    })
+                except Exception as e:
+                    filas.append({"Modelo": nombre, "error": str(e)[:90]})
+            barra.progress(1.0, text="¡Listo!")
+            barra.empty()
+            st.session_state.cmp_resultados = filas
+            st.session_state.cmp_metrica = "accuracy" if tarea_key == "clasificacion" else "r2"
+
+        res = st.session_state.get("cmp_resultados")
+        if res:
+            metrica = st.session_state.get("cmp_metrica", "score")
+            validos = [r for r in res if metrica in r]
+            fallidos = [r for r in res if metrica not in r]
+            if validos:
+                tabla = pd.DataFrame(validos).sort_values(metrica, ascending=False).reset_index(drop=True)
+                tabla.index = tabla.index + 1
+                st.divider()
+                _subheader("Ranking")
+                mostrar_df(tabla.round(4))
+                mejor = tabla.iloc[0]
+                st.success(f"Mejor modelo: **{mejor['Modelo']}** ({metrica} medio = {mejor[metrica]:.4f})")
+                st.plotly_chart(
+                    Visualizacion(tabla).grafica_barras("Modelo", metrica),
+                    use_container_width=True,
+                )
+            if fallidos:
+                st.caption("No se pudieron evaluar: " + ", ".join(
+                    f"{r['Modelo']} ({r.get('error', '')})" for r in fallidos
+                ))
 
     elif seccion == "⑧ Asistente IA":
         _page_header("IA", "Asistente IA", "datos / asistente")

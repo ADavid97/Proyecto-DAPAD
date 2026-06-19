@@ -1,26 +1,28 @@
-from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor
 from .modelo import ModeloSupervisado
 
 
 class ModeloGradientBoostingRegresion(ModeloSupervisado):
-    """Gradient Boosting para regresión: árboles encadenados que corrigen el error
-    del anterior. Suele dar la mejor exactitud en datos tabulares, a cambio de más
-    cómputo y sensibilidad a learning_rate × n_estimators. No necesita escalado.
+    """Gradient Boosting basado en histogramas para regresión (HistGradientBoosting).
+
+    Mismo algoritmo que GradientBoosting clásico pero implementado con histogramas:
+    10-100× más rápido, soporta paralelismo (n_jobs) y maneja nulos nativamente.
+    No necesita escalado y expone importancia de features por permutación.
     """
 
     es_clasificacion = False
     scoring_cv = "r2"
 
     def __init__(self, datos, n_estimators: int = 100, learning_rate: float = 0.1,
-                 profundidad_max: int = 3):
+                 profundidad_max: int | None = None):
         super().__init__(datos)
         self.n_estimators = n_estimators
-        self.learning_rate = learning_rate  # cuánto aporta cada árbol; menor = más lento pero más fino
+        self.learning_rate = learning_rate
         self.profundidad_max = profundidad_max
 
-    def _crear_estimador(self) -> GradientBoostingRegressor:
-        return GradientBoostingRegressor(
-            n_estimators=self.n_estimators,
+    def _crear_estimador(self) -> HistGradientBoostingRegressor:
+        return HistGradientBoostingRegressor(
+            max_iter=self.n_estimators,
             learning_rate=self.learning_rate,
             max_depth=self.profundidad_max,
             random_state=42,
@@ -28,7 +30,7 @@ class ModeloGradientBoostingRegresion(ModeloSupervisado):
 
     def _rejilla_busqueda(self) -> dict:
         return {
-            "n_estimators": [100, 200, 300],
+            "max_iter": [100, 200, 300],
             "learning_rate": [0.01, 0.05, 0.1, 0.2],
-            "max_depth": [2, 3, 5],
+            "max_depth": [None, 3, 5],
         }
