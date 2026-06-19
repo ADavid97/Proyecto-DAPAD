@@ -575,7 +575,7 @@ with st.sidebar:
 
             if st.session_state.hojas_excel:
                 nombre = st.selectbox("Selecciona hoja", list(st.session_state.hojas_excel.keys()), key="sel_excel")
-                if st.button("Cargar hoja", key="btn_excel", use_container_width=True):
+                if st.button("Cargar hoja", key="btn_excel", use_container_width=True) and nombre is not None:
                     df = st.session_state.hojas_excel[nombre]
                     nombre_ds = f"{archivo.name if archivo else 'excel'}[{nombre}]"
                     _cargar_dataset(nombre_ds, df)
@@ -621,7 +621,7 @@ with st.sidebar:
 
         if st.session_state.tablas_json:
             nombre = st.selectbox("Selecciona tabla", list(st.session_state.tablas_json.keys()), key="sel_json")
-            if st.button("Cargar tabla", key="btn_json", use_container_width=True):
+            if st.button("Cargar tabla", key="btn_json", use_container_width=True) and nombre is not None:
                 df = st.session_state.tablas_json[nombre]
                 _cargar_dataset(nombre, df)
                 st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
@@ -659,7 +659,7 @@ with st.sidebar:
             }
             if opciones:
                 nombre_el = st.selectbox("Elemento", list(opciones.keys()), key="sel_url")
-                if st.button("Cargar elemento", key="btn_cargar_url", use_container_width=True):
+                if st.button("Cargar elemento", key="btn_cargar_url", use_container_width=True) and nombre_el is not None:
                     df = opciones[nombre_el]
                     _cargar_dataset(nombre_el, df)
                     st.success(f"{df.shape[0]} filas × {df.shape[1]} columnas")
