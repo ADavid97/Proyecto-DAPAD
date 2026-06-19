@@ -21,6 +21,29 @@ class Visualizacion:
         fig.update_layout(bargap=0.06, xaxis_title=columna, yaxis_title="Frecuencia")
         return fig
 
+    def histograma_comparado(self, columna: str, grupo: str) -> go.Figure:
+        """Histograma de `columna` superpuesto por `grupo`, para comparar datasets."""
+        fig = px.histogram(
+            self.datos, x=columna, color=grupo,
+            template="daad",
+            color_discrete_sequence=PALETTE,
+            barmode="overlay",
+            opacity=0.65,
+        )
+        # Leyenda horizontal arriba del gráfico: los nombres de origen (que
+        # pueden ser largos) se ven completos en vez de cortarse a la derecha.
+        fig.update_layout(
+            bargap=0.06, xaxis_title=columna, yaxis_title="Frecuencia",
+            legend=dict(
+                title=None,
+                orientation="h",
+                yanchor="bottom", y=1.02,
+                xanchor="left", x=0,
+            ),
+            margin=dict(t=64),
+        )
+        return fig
+
     def boxplot(self, columna: str) -> go.Figure:
         fig = px.box(
             self.datos, y=columna,
@@ -73,8 +96,10 @@ class Visualizacion:
         return fig
 
     def grafica_lineas(self, col_x: str, col_y: str) -> go.Figure:
+        # Ordenar por X evita el zigzag cuando los datos no vienen ordenados
+        datos = self.datos.sort_values(col_x)
         fig = px.line(
-            self.datos, x=col_x, y=col_y,
+            datos, x=col_x, y=col_y,
             template="daad",
             color_discrete_sequence=PALETTE,
         )
@@ -176,6 +201,30 @@ class Visualizacion:
             template="daad",
             xaxis_title="Real",
             yaxis_title="Predicho",
+        )
+        return fig
+
+    def grafica_residuos(self, y_real: np.ndarray, y_predicho: np.ndarray) -> go.Figure:
+        """Residuo (real − predicho) frente al valor predicho.
+
+        En un buen modelo los residuos se reparten al azar alrededor de 0; un
+        patrón (curva, embudo) delata que el modelo se está dejando estructura.
+        """
+        y_real = np.asarray(y_real, dtype=float)
+        y_predicho = np.asarray(y_predicho, dtype=float)
+        residuos = y_real - y_predicho
+        fig = go.Figure()
+        fig.add_scatter(
+            x=y_predicho.tolist(), y=residuos.tolist(),
+            mode="markers",
+            marker=dict(color=PALETTE[0], opacity=0.6, size=6),
+            name="Residuos",
+        )
+        fig.add_hline(y=0, line=dict(color=PALETTE[1], dash="dash", width=1.5))
+        fig.update_layout(
+            template="daad",
+            xaxis_title="Predicho",
+            yaxis_title="Residuo (real − predicho)",
         )
         return fig
 

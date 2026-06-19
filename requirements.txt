@@ -9,3 +9,4 @@ plotly==6.7.0
 cloudscraper==1.2.71
 beautifulsoup4==4.14.3
 lxml==6.1.1
+requests==2.33.1

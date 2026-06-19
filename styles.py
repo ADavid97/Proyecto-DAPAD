@@ -16,6 +16,10 @@ _CSS = """
 html, body, [class*="css"] {
     font-family: 'IBM Plex Sans', Helvetica, sans-serif;
 }
+/* Zoom por defecto de la app (equivalente al 110% de Chrome) */
+html {
+    zoom: 1.1;
+}
 .stApp {
     background-color: #fafaf7;
 }
@@ -60,13 +64,19 @@ section[data-testid="stSidebar"] {
     gap: 5px;
     align-items: center;
 }
+/* Círculos de la barra estilo macOS */
 .daad-chrome-dots span {
     width: 9px;
     height: 9px;
     border-radius: 50%;
-    border: 1.2px solid #6b6b6b;
+    border: none;          /* sin borde */
     display: inline-block;
 }
+
+/* Asignar color a cada círculo */
+.daad-chrome-dots span:nth-child(1) { background-color: #FF5F57; }  /* rojo   */
+.daad-chrome-dots span:nth-child(2) { background-color: #FFBD2E; }  /* amarillo */
+.daad-chrome-dots span:nth-child(3) { background-color: #28CA41; }  /* verde  */
 .daad-chrome-url {
     flex: 1;
     font-family: 'IBM Plex Mono', monospace;
@@ -102,7 +112,7 @@ section[data-testid="stSidebar"] {
 
 /* Authors block */
 .daad-authors {
-    padding: 4px 0 10px;
+    padding: 0px 0 50px;
 }
 .daad-authors p {
     font-family: 'IBM Plex Mono', monospace !important;
@@ -243,17 +253,23 @@ p, .stMarkdown p {
 [data-testid="stDataFrame"] {
     border: 1.4px solid #d8d4cb !important;
     border-radius: 3px !important;
-    overflow: hidden !important;
+    overflow: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
 }
 /* Glide data grid (Streamlit >= 1.18) */
 .glideDataEditor {
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: 11px !important;
+    width: 100% !important;
+}
+[data-testid="stDataFrame"] > div {
+    justify-content: flex-start !important; /* AÑADIDO: Alinea la tabla a la izquierda si el zoom la descentra */
 }
 /* Classic table fallback */
 [data-testid="stDataFrame"] table {
     border-collapse: collapse !important;
-    width: 100%;
+    width: 100% !important;
 }
 [data-testid="stDataFrame"] thead th {
     background: #f3f0e8 !important;
@@ -796,6 +812,67 @@ header[data-testid="stHeader"] { background: transparent !important; }
     margin-bottom: 12px;
     margin-top: 4px;
     display: block;
+}
+.block-container {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+}
+
+/* ═══ SIDEBAR: sin espacio superior, flechas nativas, fondo transparente ═══ */
+
+/* 1. Sidebar pegado al borde superior */
+section[data-testid="stSidebar"] {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+    position: relative !important;   /* necesario para el botón absoluto */
+}
+
+/* 2. Contenido sin relleno extra */
+[data-testid="stSidebarContent"] {
+    padding-top: 0 !important;
+}
+[data-testid="stSidebarContent"] > *:first-child {
+    margin-top: 0 !important;
+}
+
+/* 3. Contenedor del botón de colapso no ocupa espacio */
+[data-testid="stSidebarHeader"] {
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+}
+
+/* 4. Botón de colapso: absoluto, esquina superior derecha, fondo transparente */
+[data-testid="stSidebarCollapseButton"] {
+    position: absolute !important;
+    top: 6px !important;            /* ajusta según necesites */
+    right: 14px !important;        /* alineado con el padding de la barra */
+    z-index: 300 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;   /* ← sin fondo */
+    border: none !important;
+    cursor: pointer;
+}
+
+/* 5. Mostrar las flechas nativas (sin ocultar el SVG) */
+/*    No añadimos regla para svg, así que se ven por defecto */
+/* Reducir espacio entre la primera etiqueta y los autores */
+.daad-section-label:first-of-type {
+    padding-bottom: 0 !important;   /* elimina los 6px de abajo */
+}
+.daad-authors {
+    padding-top: 0 !important;      /* ya lo tenías, por si acaso */
+}
+.daad-authors p:first-child {
+    margin-top: -12px;               /* acerca aún más el primer nombre */
+}
+.daad-section-label:first-of-type {
+    padding-top: 12px !important;   /* antes 4px; ajústalo a tu gusto */
 }
 </style>
 """

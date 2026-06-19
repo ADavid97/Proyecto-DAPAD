@@ -42,16 +42,21 @@ class Datos:
             self.ultimo_error = str(e)
             return None
 
+    @staticmethod
+    def _conectar(host: str, puerto: int, base_datos: str, usuario: str, contrasena: str):
+        """Abre una conexión a PostgreSQL con los parámetros dados."""
+        return psycopg2.connect(
+            host=host,
+            port=puerto,
+            dbname=base_datos,
+            user=usuario,
+            password=contrasena,
+        )
+
     def listar_tablas(self, host: str, puerto: int, base_datos: str, usuario: str, contrasena: str) -> list | None:
         """Devuelve los nombres de las tablas del esquema public, o None si falla la conexión."""
         try:
-            conexion = psycopg2.connect(
-                host=host,
-                port=puerto,
-                dbname=base_datos,
-                user=usuario,
-                password=contrasena
-            )
+            conexion = self._conectar(host, puerto, base_datos, usuario, contrasena)
             cursor = conexion.cursor()
             cursor.execute("""
                 SELECT table_name FROM information_schema.tables
@@ -70,13 +75,7 @@ class Datos:
     def cargar_tabla_sql(self, host: str, puerto: int, base_datos: str, usuario: str, contrasena: str, tabla: str) -> pd.DataFrame | None:
         """Carga una tabla completa de PostgreSQL como DataFrame."""
         try:
-            conexion = psycopg2.connect(
-                host=host,
-                port=puerto,
-                dbname=base_datos,
-                user=usuario,
-                password=contrasena
-            )
+            conexion = self._conectar(host, puerto, base_datos, usuario, contrasena)
             # Identifier escapa el nombre de la tabla para evitar inyección SQL
             query = sql.SQL("SELECT * FROM {}").format(sql.Identifier(tabla))
             self.datos_crudos = pd.read_sql_query(query.as_string(conexion), conexion)
@@ -193,20 +192,34 @@ class Datos:
 
     @classmethod
     def _limpiar_celdas(cls, df: pd.DataFrame) -> pd.DataFrame:
-        """Quita referencias [n] y espacios redundantes de las celdas de texto."""
+        """Limpia celdas de texto: quita referencias [n], colapsa espacios y
+        convierte los marcadores de dato faltante ("", "-", "n/d"...) en NaN,
+        para que el preprocesamiento (eliminar/rellenar nulos) los reconozca."""
+        def _normalizar(v):
+            if not isinstance(v, str):
+                return v
+            limpio = cls._limpiar(v)
+            return float("nan") if limpio.lower() in cls._VALORES_FALTANTES else limpio
+
         for col in df.columns:
             if not pd.api.types.is_numeric_dtype(df[col]):
-                df[col] = df[col].map(lambda v: cls._limpiar(v) if isinstance(v, str) else v)
+                df[col] = df[col].map(_normalizar)
         return df
 
     _VALORES_FALTANTES = {"", "-", "—", "–", "n/d", "n/a", "s/d"}
 
     @staticmethod
-    def _a_numero(texto: str) -> float | None:
+    def _a_numero(texto: str, sep_decimal: str | None = None) -> float | None:
         """Interpreta un string como número con convención española o inglesa.
 
         Maneja miles con espacio/punto/coma ("1 417 492 000", "1.234.567"),
         decimales con coma ("17,57") y porcentajes ("3,2%" -> 0.032).
+
+        `sep_decimal` ('.', ',' o None) lo fija quien llama tras analizar la
+        columna entera: resuelve el caso ambiguo de un único separador seguido de
+        exactamente 3 dígitos (p. ej. "12.345", que puede ser 12345 o 12.345). Si
+        es None se usa la heurística por valor, que ante la duda lo trata como
+        separador de miles.
         """
         s = re.sub(r"[\s  ]", "", str(texto))
         if not re.fullmatch(r"[+-]?\d[\d.,]*%?", s):
@@ -220,6 +233,10 @@ class Datos:
                 s = s.replace(".", "").replace(",", ".")
             else:
                 s = s.replace(",", "")
+        elif sep_decimal == ".":
+            s = s.replace(",", "")                      # la columna usa el punto como decimal
+        elif sep_decimal == ",":
+            s = s.replace(".", "").replace(",", ".")    # la coma es decimal; el punto, de miles
         elif "," in s:
             # una sola coma con grupo distinto de 3 dígitos -> decimal; si no, miles
             if s.count(",") == 1 and len(s.split(",")[1]) != 3:
@@ -233,6 +250,36 @@ class Datos:
         except ValueError:
             return None
         return valor / 100 if es_pct else valor
+
+    @classmethod
+    def _inferir_sep_decimal(cls, textos) -> str | None:
+        """Deduce el separador decimal de una columna ('.', ',' o None si no hay
+        pistas) mirando todos sus valores a la vez.
+
+        Evidencia: un separador que aparece solo y seguido de un número de dígitos
+        DISTINTO de 3 es necesariamente decimal, porque un separador de miles
+        siempre agrupa de 3 en 3 ("1.5" o "12,3456" delatan el punto/coma decimal).
+        Esa decisión se aplica luego al caso ambiguo de 3 dígitos ("12.345"). Si no
+        hay evidencia, o es contradictoria, devuelve None y se usa la heurística.
+        """
+        punto_decimal = coma_decimal = False
+        for v in textos:
+            s = re.sub(r"\s", "", str(v)).rstrip("%")
+            if "," in s and "." in s:
+                continue  # ambos presentes: se resuelve por la posición del decimal
+            for sep in (".", ","):
+                if s.count(sep) == 1:
+                    frac = s.split(sep)[1]
+                    if frac.isdigit() and len(frac) != 3:
+                        if sep == ".":
+                            punto_decimal = True
+                        else:
+                            coma_decimal = True
+        if punto_decimal and not coma_decimal:
+            return "."
+        if coma_decimal and not punto_decimal:
+            return ","
+        return None
 
     @classmethod
     def _convertir_numericas(cls, df: pd.DataFrame, umbral: float = 0.8) -> pd.DataFrame:
@@ -250,7 +297,10 @@ class Datos:
                 continue
             textos = serie[mask].astype(str).map(cls._limpiar)
             es_dato = ~textos.str.lower().isin(cls._VALORES_FALTANTES)
-            convertida = textos.map(cls._a_numero)
+            # Decide el separador decimal con toda la columna antes de convertir,
+            # para no malinterpretar valores ambiguos como "12.345" fila por fila.
+            sep = cls._inferir_sep_decimal(textos[es_dato])
+            convertida = textos.map(lambda t: cls._a_numero(t, sep))
             n_datos = int(es_dato.sum())
             if n_datos and int((convertida.notna() & es_dato).sum()) / n_datos >= umbral:
                 df[col] = convertida.where(es_dato).reindex(df.index)
